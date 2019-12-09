@@ -1,0 +1,2 @@
+# ghostliNES
+Go NES emulator
