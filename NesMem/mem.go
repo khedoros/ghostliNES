@@ -4,3 +4,6 @@ package NesMem
 type NesMem struct {
 	Blah int8
 }
+
+func (this *NesMem) New(filename *string) {
+}

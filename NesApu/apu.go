@@ -4,3 +4,6 @@ package NesApu
 type NesApu struct {
 	Blah int8
 }
+
+func (this *NesApu) New() {
+}
