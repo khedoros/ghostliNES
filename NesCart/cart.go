@@ -56,14 +56,14 @@ type NesCart struct {
 
 type Mirror_type int
 const (
-	HMIRROR mirror_type = iota
+	HMIRROR Mirror_type = iota
 	VMIRROR
 	FOURSCREEN
 )
 
 type Mapper_type int
 const (
-	NROM mapper_type = iota //247 games
+	NROM Mapper_type = iota //247 games
 	MMC1 //680 games
 	UxROM //269 games
 	CNROM //155 games
@@ -99,7 +99,7 @@ const (
 
 type Sys_type int
 const (
-	VSUnisystem
+	VSUnisystem = iota
 	Playchoice10
 	NES
 	Extended
@@ -107,7 +107,7 @@ const (
 
 type Tv_type int
 const (
-	NTSC
+	NTSC = iota
 	PAL
 	DUAL
 )

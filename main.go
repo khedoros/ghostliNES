@@ -68,6 +68,53 @@ func run() int {
 	var apu NesApu.NesApu
 	apu.New()
 
+	running := true
+	var event sdl.Event
+	var joysticks [16]*sdl.Joystick
+
+	for running == true {
+		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch t := event.(type) {
+			case *sdl.QuitEvent:
+				running = false
+			case *sdl.KeyboardEvent:
+				fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%c\tmodifiers:%d\tstate:%d\trepeat:%d\n",
+					t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
+				mem.InputEvent(event)
+			case *sdl.JoyAxisEvent:
+				fmt.Printf("[%d ms] JoyAxis\ttype:%d\twhich:%c\taxis:%d\tvalue:%d\n",
+					t.Timestamp, t.Type, t.Which, t.Axis, t.Value)
+				mem.InputEvent(event)
+			case *sdl.JoyBallEvent:
+				fmt.Printf("[%d ms] JoyBall\ttype:%d\twhich:%d\tball:%d\txrel:%d\tyrel:%d\n",
+					t.Timestamp, t.Type, t.Which, t.Ball, t.XRel, t.YRel)
+				mem.InputEvent(event)
+			case *sdl.JoyButtonEvent:
+				fmt.Printf("[%d ms] JoyButton\ttype:%d\twhich:%d\tbutton:%d\tstate:%d\n",
+					t.Timestamp, t.Type, t.Which, t.Button, t.State)
+				mem.InputEvent(event)
+			case *sdl.JoyHatEvent:
+				fmt.Printf("[%d ms] JoyHat\ttype:%d\twhich:%d\that:%d\tvalue:%d\n",
+					t.Timestamp, t.Type, t.Which, t.Hat, t.Value)
+				mem.InputEvent(event)
+			case *sdl.JoyDeviceAddedEvent:
+				joysticks[int(t.Which)] = sdl.JoystickOpen(t.Which)
+				if joysticks[int(t.Which)] != nil {
+					fmt.Printf("Joystick %d connected\n", t.Which)
+				}
+			case *sdl.JoyDeviceRemovedEvent:
+				if joystick := joysticks[int(t.Which)]; joystick != nil {
+					joystick.Close()
+				}
+				fmt.Printf("Joystick %d disconnected\n", t.Which)
+			default:
+				fmt.Printf("Some event\n")
+			}
+
+		}
+		sdl.Delay(16) //TODO: Better frame timing solution
+	}
+
 	return 0
 }
 
