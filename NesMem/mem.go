@@ -3,6 +3,7 @@ package NesMem
 import (
 	"fmt"
 	"github.com/khedoros/ghostliNES/NesCart"
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 //An NesMem struct holds the state of the NES's memory mapping circuitry
