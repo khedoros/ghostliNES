@@ -80,23 +80,23 @@ func run() int {
 			case *sdl.KeyboardEvent:
 				fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%c\tmodifiers:%d\tstate:%d\trepeat:%d\n",
 					t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
-				mem.InputEvent(event)
+				mem.InputEvent(&event)
 			case *sdl.JoyAxisEvent:
 				fmt.Printf("[%d ms] JoyAxis\ttype:%d\twhich:%c\taxis:%d\tvalue:%d\n",
 					t.Timestamp, t.Type, t.Which, t.Axis, t.Value)
-				mem.InputEvent(event)
+				mem.InputEvent(&event)
 			case *sdl.JoyBallEvent:
 				fmt.Printf("[%d ms] JoyBall\ttype:%d\twhich:%d\tball:%d\txrel:%d\tyrel:%d\n",
 					t.Timestamp, t.Type, t.Which, t.Ball, t.XRel, t.YRel)
-				mem.InputEvent(event)
+				mem.InputEvent(&event)
 			case *sdl.JoyButtonEvent:
 				fmt.Printf("[%d ms] JoyButton\ttype:%d\twhich:%d\tbutton:%d\tstate:%d\n",
 					t.Timestamp, t.Type, t.Which, t.Button, t.State)
-				mem.InputEvent(event)
+				mem.InputEvent(&event)
 			case *sdl.JoyHatEvent:
 				fmt.Printf("[%d ms] JoyHat\ttype:%d\twhich:%d\that:%d\tvalue:%d\n",
 					t.Timestamp, t.Type, t.Which, t.Hat, t.Value)
-				mem.InputEvent(event)
+				mem.InputEvent(&event)
 			case *sdl.JoyDeviceAddedEvent:
 				joysticks[int(t.Which)] = sdl.JoystickOpen(t.Which)
 				if joysticks[int(t.Which)] != nil {

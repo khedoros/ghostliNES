@@ -48,21 +48,21 @@ var runtime = [256]int { 7,6,0,0, 0,3,5,0, 3,2,2,0, 0,4,6,0,
                          2,5,0,0, 0,4,6,0, 2,4,0,0, 0,4,7,0,}
 
 
-type op_func func(uint16)
-type addr_func func() uint16
+type op_func func(*Cpu6502, uint16)
+type addr_func func(*Cpu6502) uint16
 
-//func (this *Cpu6502) op_unimpl(arg ...byte) {
-func (this *Cpu6502) op_unimpl(arg uint16) {
+var op_unimpl op_func = func(this *Cpu6502, arg uint16) {
 	fmt.Println("Joke's on you. That function doesn't exist.")
 }
-func (this *Cpu6502) addr_unimpl() uint16 {
+
+var addr_unimpl addr_func = func(this *Cpu6502) uint16 {
 	fmt.Println("Addressing mode unimplemented.")
 	return 0
 }
 
 var addr = [256]addr_func {addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                           addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                           addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
                              addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
                              addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
                              addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
