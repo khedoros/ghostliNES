@@ -15,6 +15,7 @@ type Cpu6502 struct {
 	pc                      uint16
 	areg, xreg, yreg, spreg byte
 	mem                     *NesMem.NesMem
+	ops [256]func() int
 }
 
 func (this *Cpu6502) New(m *NesMem.NesMem) {
@@ -25,6 +26,9 @@ func (this *Cpu6502) New(m *NesMem.NesMem) {
 	mem := m
 	apu := NesApu.NesApu{}
 	fmt.Println(mem.Blah, apu.Blah)
+	for i:=0; i<256; i++ {
+		this.ops[i] = this.opc(byte(i),addr_map[i],op_map[i])
+	}
 }
 
 var runtime = [256]int { 7,6,0,0, 0,3,5,0, 3,2,2,0, 0,4,6,0,
@@ -47,12 +51,12 @@ var runtime = [256]int { 7,6,0,0, 0,3,5,0, 3,2,2,0, 0,4,6,0,
                          2,6,0,0, 3,3,5,0, 2,2,2,0, 4,4,6,0,
                          2,5,0,0, 0,4,6,0, 2,4,0,0, 0,4,7,0,}
 
-
-type op_func func(*Cpu6502, uint16)
+type op_func func(*Cpu6502, uint16) int
 type addr_func func(*Cpu6502) uint16
 
-var op_unimpl op_func = func(this *Cpu6502, arg uint16) {
+var op_unimpl op_func = func(this *Cpu6502, arg uint16) int {
 	fmt.Println("Joke's on you. That function doesn't exist.")
+	return 0
 }
 
 var addr_unimpl addr_func = func(this *Cpu6502) uint16 {
@@ -60,38 +64,42 @@ var addr_unimpl addr_func = func(this *Cpu6502) uint16 {
 	return 0
 }
 
-var addr = [256]addr_func {addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                           addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                           addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
-                             addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl, }
+func (cpu *Cpu6502) opc(code byte, a addr_func, o op_func) func() int {
+	return func() int {return runtime[code] + o(cpu, a(cpu))}
+}
 
-var op = [256]op_func {op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
-                          op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl, }
+var addr_map = [256]addr_func {addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,
+                               addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl,addr_unimpl, }
+
+var op_map = [256]op_func {op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
+                           op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl, }
 
 
