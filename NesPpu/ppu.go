@@ -9,5 +9,5 @@ type NesPpu struct {
 	Blah int8
 }
 
-func (this *NesPpu) New(mem *NesMem.NesMem, res *int) {
+func (this *NesPpu) New(mem *NesMem.NesMem, res int) {
 }
