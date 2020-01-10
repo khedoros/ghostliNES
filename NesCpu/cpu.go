@@ -102,4 +102,13 @@ var op_map = [256]op_func {op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_
                            op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,
                            op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl,op_unimpl, }
 
+//        void set_sign(unsigned char);                   set sign true if data >= 128 else set sign false
+//        void set_zero(unsigned char);                   set zero true if data == 0   else set zero false
+//        void set_carry(unsigned char);                  set carry true if data != 0 else set carry false
+//        void set_verflow(unsigned char, unsigned char); umm...no-op, apparently? probably not correct for the system...
+
+//        void push(unsigned char val); write value to 0x100 + sp, dec sp
+//        void push2(unsigned int val); write high to 0x100+sp, dec sp, write low to 0x100+sp, dec sp
+//        unsigned int pop(); inc sp, read value from 0x100+sp
+//        unsigned int pop2(); inc sp, read low from 0x100+sp, inc sp, read hi from 0x100+sp
 
