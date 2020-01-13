@@ -35,7 +35,11 @@ func run() int {
 	}
 	defer sdl.Quit()
 
-	if window, createWinErr = sdl.CreateWindow(winTitle, sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, winWidth, winHeight, sdl.WINDOW_SHOWN); createWinErr != nil {
+	if window, createWinErr = sdl.CreateWindow(winTitle,
+	                          sdl.WINDOWPOS_UNDEFINED,
+				  sdl.WINDOWPOS_UNDEFINED,
+				  winWidth, winHeight,
+				  sdl.WINDOW_SHOWN); createWinErr != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", createWinErr)
 		return 2
 	}
@@ -92,6 +96,14 @@ func run() int {
 			}
 
 		}
+
+		emulator.RunFrame()
+		framebuffer := emulator.GetFrame()
+		texture, _ := renderer.CreateTextureFromSurface(framebuffer)
+		renderer.Clear()
+		renderer.Copy(texture, nil, nil)
+		renderer.Present()
+
 		sdl.Delay(16) //TODO: Better frame timing solution
 	}
 

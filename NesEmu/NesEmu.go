@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+//	"image/color"
 
         "github.com/khedoros/ghostliNES/NesCpu"
         "github.com/khedoros/ghostliNES/NesMem"
@@ -67,4 +68,20 @@ func (emu *NesEmu) Destroy() {
 
 func (emu *NesEmu) InputEvent(event *sdl.Event) {
 	emu.mem.InputEvent(event)
+}
+
+func (emu *NesEmu) RunFrame() {
+	//run a frame of CPU
+	//finish PPU render
+	//finish APU render
+}
+
+func (emu *NesEmu) GetFrame() (*sdl.Surface) {
+	s, _ := sdl.CreateRGBSurface(0,renderWidth,renderHeight, 32, 0, 0, 0, 0)
+	for y:=0;y<renderHeight;y++ {
+		for x:=0;x<renderWidth;x++ {
+			//s.Set(x,y,color.RGBA{uint8(x),uint8(y),255,255})
+		}
+	}
+	return s
 }
