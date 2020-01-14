@@ -128,3 +128,11 @@ func (cart *NesCart) Load(filename *string) bool {
 	}
 	return true
 }
+
+func (this *NesCart) Read(addr uint16, cycle uint64) uint8 {
+        return 0
+}
+
+func (this *NesCart) Write(addr uint16, val uint8, cycle uint64) {
+}
+

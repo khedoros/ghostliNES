@@ -25,7 +25,7 @@ func (this *Cpu6502) New(m *NesMem.NesMem) {
 	fmt.Println("init'd CPU")
 	mem := m
 	apu := NesApu.NesApu{}
-	fmt.Println(mem.Blah, apu.Blah)
+	fmt.Println(mem.Read(0,0), apu.Read(0,0))
 	for i:=0; i<256; i++ {
 		this.ops[i] = this.opc(byte(i),addr_map[i],op_map[i])
 	}

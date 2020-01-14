@@ -56,7 +56,7 @@ func (emu *NesEmu) New() error {
 
         emu.mem.New(&emu.filename)
         emu.cpu.New(&emu.mem)
-        emu.ppu.New(&emu.mem, emu.resolution)
+        emu.ppu.New(emu.mem.GetCart(), emu.resolution)
         emu.apu.New()
 
 	return nil
