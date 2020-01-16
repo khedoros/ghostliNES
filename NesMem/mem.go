@@ -1,19 +1,20 @@
-package NesMem
+package nesmem
 
 import (
 	"fmt"
-	"github.com/khedoros/ghostliNES/NesApu"
-	"github.com/khedoros/ghostliNES/NesCart"
-	"github.com/khedoros/ghostliNES/NesPpu"
+
+	nesapu "github.com/khedoros/ghostliNES/NesApu"
+	nescart "github.com/khedoros/ghostliNES/NesCart"
+	nesppu "github.com/khedoros/ghostliNES/NesPpu"
 	"github.com/veandco/go-sdl2/sdl"
 )
 
 //An NesMem struct holds the state of the NES's memory mapping circuitry
 type NesMem struct {
-	cart *NesCart.NesCart
-	ppu  *NesPpu.NesPpu
-	apu  *NesApu.NesApu
-	ram [0x800]uint8
+	cart *nescart.NesCart
+	ppu  *nesppu.NesPpu
+	apu  *nesapu.NesApu
+	ram  [0x800]uint8
 }
 
 func (this *NesMem) InputEvent(event *sdl.Event) {
@@ -21,7 +22,7 @@ func (this *NesMem) InputEvent(event *sdl.Event) {
 }
 
 func (this *NesMem) New(filename *string) {
-	this.cart = &NesCart.NesCart{}
+	this.cart = &nescart.NesCart{}
 	fmt.Println("Loading file ", filename)
 	valid := this.cart.Load(filename)
 	if !valid {
@@ -30,13 +31,13 @@ func (this *NesMem) New(filename *string) {
 		fmt.Println("Loaded ROM.")
 	}
 
-	this.apu = &NesApu.NesApu{}
-	this.ppu = &NesPpu.NesPpu{}
+	this.apu = &nesapu.NesApu{}
+	this.ppu = &nesppu.NesPpu{}
 }
 
 func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {
 	if addr < 0x2000 {
-		return this.ram[addr & 0x800]
+		return this.ram[addr&0x800]
 	} else if addr < 0x4000 {
 		return this.ppu.Read(addr, cycle)
 	} else if addr < 0x4020 {
@@ -49,7 +50,7 @@ func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {
 
 func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 	if addr < 0x2000 {
-		this.ram[addr & 0x800] = val
+		this.ram[addr&0x800] = val
 	} else if addr < 0x4000 {
 		this.ppu.Write(addr, val, cycle)
 	} else if addr < 0x4020 {
@@ -59,6 +60,6 @@ func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 	}
 }
 
-func (this *NesMem) GetCart() *NesCart.NesCart {
+func (this *NesMem) GetCart() *nescart.NesCart {
 	return this.cart
 }

@@ -5,19 +5,18 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/khedoros/ghostliNES/NesEmu"
+	nesemu "github.com/khedoros/ghostliNES/NesEmu"
 	"github.com/veandco/go-sdl2/sdl"
-
 )
 
-var winTitle string = NesEmu.GetWindowTitle()
-var winWidth, winHeight int32 = NesEmu.GetWindowSize()
+var winTitle string = nesemu.GetWindowTitle()
+var winWidth, winHeight int32 = nesemu.GetWindowSize()
 
 func init() { runtime.LockOSThread() }
 
 func run() int {
 
-	var emulator NesEmu.NesEmu
+	var emulator nesemu.NesEmu
 	var emuInitErr, sdlInitErr, createWinErr, createRendErr error
 	emuInitErr = emulator.New()
 	if emuInitErr != nil {
@@ -36,10 +35,10 @@ func run() int {
 	defer sdl.Quit()
 
 	if window, createWinErr = sdl.CreateWindow(winTitle,
-	                          sdl.WINDOWPOS_UNDEFINED,
-				  sdl.WINDOWPOS_UNDEFINED,
-				  winWidth, winHeight,
-				  sdl.WINDOW_SHOWN); createWinErr != nil {
+		sdl.WINDOWPOS_UNDEFINED,
+		sdl.WINDOWPOS_UNDEFINED,
+		winWidth, winHeight,
+		sdl.WINDOW_SHOWN); createWinErr != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", createWinErr)
 		return 2
 	}
