@@ -33,6 +33,14 @@ func (cpu *CPU6502) New(m *nesmem.NesMem) {
 	}
 }
 
+type CPU6502instr struct {
+	OpSize      int
+	OpTime      int
+	OpExtraTime int
+	OpFunc      func(*CPU6502, uint16) int
+	AddrFunc    func(*CPU6502) uint16
+}
+
 var runtime = [256]int{7, 6, 0, 0, 0, 3, 5, 0, 3, 2, 2, 0, 0, 4, 6, 0,
 	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
 	6, 6, 0, 0, 3, 3, 5, 0, 4, 2, 2, 0, 4, 4, 6, 0,
@@ -71,7 +79,7 @@ func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int {
 }
 
 var addrMap = [256]addrFunc{
-    addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
+	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
 	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
 	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
 	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
@@ -89,7 +97,7 @@ var addrMap = [256]addrFunc{
 	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl}
 
 var opMap = [256]opFunc{
-    opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
+	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
 	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
 	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
 	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
