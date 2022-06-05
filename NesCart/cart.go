@@ -1,8 +1,10 @@
 package nescart
 
 import (
+	"archive/zip"
 	"fmt"
 	"io/ioutil"
+	"strings"
 )
 
 // Equal tells whether a and b contain the same elements.
@@ -130,9 +132,24 @@ const (
 
 //Load reads the provided ROM file, and puts it into an NesCart struct for access by the emulator
 func (cart *NesCart) Load(filename *string) bool {
-	contents, err := ioutil.ReadFile(*filename)
-	if err != nil {
-		panic(err)
+	var contents []byte
+	var err error
+	if strings.HasSuffix(*filename, ".zip") {
+		zipFile, err := zip.OpenReader(*filename)
+		if err != nil {
+			panic(err)
+		}
+		defer zipFile.Close()
+		firstFile, err := zipFile.File[0].Open()
+		contents, err = ioutil.ReadAll(firstFile)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		contents, err = ioutil.ReadFile(*filename)
+		if err != nil {
+			panic(err)
+		}
 	}
 	fmt.Println("File length: ", len(contents))
 	header := contents[:16]

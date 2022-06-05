@@ -55,7 +55,7 @@ func run() int {
 	var event sdl.Event
 	var joysticks [16]*sdl.Joystick
 
-	for running == true {
+	for running {
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
 			switch t := event.(type) {
 			case *sdl.QuitEvent:

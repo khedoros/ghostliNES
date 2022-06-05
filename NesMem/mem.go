@@ -23,7 +23,7 @@ func (this *NesMem) InputEvent(event *sdl.Event) {
 
 func (this *NesMem) New(filename *string) {
 	this.cart = &nescart.NesCart{}
-	fmt.Println("Loading file ", filename)
+	fmt.Println("Loading file ", *filename)
 	valid := this.cart.Load(filename)
 	if !valid {
 		fmt.Println("File failed to load")
