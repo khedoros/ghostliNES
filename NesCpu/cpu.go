@@ -2,7 +2,6 @@ package nescpu
 
 import (
 	"fmt"
-	nesapu "github.com/khedoros/ghostliNES/NesApu"
 	nesmem "github.com/khedoros/ghostliNES/NesMem"
 )
 
@@ -25,9 +24,7 @@ func (cpu *CPU6502) New(m *nesmem.NesMem) {
 	cpu.pc = 0x0000
 	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg = 0, 0, 0, 0
 	fmt.Println("init'd CPU")
-	mem := m
-	apu := nesapu.NesApu{}
-	fmt.Println(mem.Read(0, 0), apu.Read(0, 0))
+	cpu.mem = m
 	for i := 0; i < 256; i++ {
 		cpu.ops[i] = cpu.opc(byte(i), addrMap[i], opMap[i])
 	}
