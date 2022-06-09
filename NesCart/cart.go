@@ -23,11 +23,10 @@ func Equal(a, b []byte) bool {
 
 //A Mapper handles mapping pages of data in a ROM to their physical addresses, visible to the CPU and PPU
 type Mapper interface {
-	Read(addr uint16) uint8
-	Write(cycle uint32, addr uint16, data uint8)
-	Ppu_read(cycle uint32, addr uint16)
-	Ppu_write(cycle uint32, addr uint16, data uint8)
-	New()
+	MapCpu(addr uint16, cycle uint64) uint16
+	MapPpu(addr uint16, cycle uint64) uint16
+	WriteCpu(addr uint16, val uint8, cycle uint64)
+	New(cart *NesCart)
 }
 
 //NesHeader defines the 16-byte structure that makes up the iNES header in most NES ROMs
@@ -56,7 +55,7 @@ type NesCart struct {
 	PrgROM []uint8
 	ChrROM []uint8
 	SRAM   []uint8
-	Mapper *Mapper
+	Mapper Mapper
 	Header NesHeader
 }
 
@@ -107,7 +106,36 @@ const (
 	HOMEBREW
 	UNROM512
 	NSF
+	UNSUPPORTED
 )
+
+func (cart *NesCart) getMapper() Mapper {
+	var mapper Mapper = nil
+	switch cart.Header.MapperNum {
+	case 0:
+		mapper = nromMapper{}
+		fmt.Println("NROM Mapper")
+	}
+	return mapper
+}
+
+type nromMapper struct {
+	cart *NesCart
+}
+
+func (m nromMapper) MapCpu(addr uint16, cycle uint64) uint16 {
+	return addr - 0x8000
+}
+
+func (m nromMapper) MapPpu(addr uint16, cycle uint64) uint16 {
+	return addr
+}
+
+func (m nromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
+
+func (m nromMapper) New(cart *NesCart) {
+	m.cart = cart
+}
 
 //SysType describes the type of NES-related machine that the ROM is for
 type SysType int
@@ -153,6 +181,7 @@ func (cart *NesCart) Load(filename *string) bool {
 	}
 	fmt.Println("File length: ", len(contents))
 	header := contents[:16]
+	contents = contents[16:]
 	if !Equal(header[:4], []byte{'N', 'E', 'S', 0x1a}) {
 		fmt.Println("Header doesn't look correct")
 		return false
@@ -160,14 +189,42 @@ func (cart *NesCart) Load(filename *string) bool {
 	for _, c := range header {
 		fmt.Printf("%02x ", c)
 	}
+	fmt.Println("")
+	cart.Header.PrgSize = int(header[4])
+	cart.PrgROM = contents[:16384*cart.Header.PrgSize]
+	contents = contents[16384*cart.Header.PrgSize:]
+	cart.Header.ChrSize = int(header[5])
+	if cart.Header.ChrSize == 0 {
+		cart.Header.ChrRAM = true
+		cart.ChrROM = make([]uint8, 8292)
+	} else {
+		if len(contents) != cart.Header.ChrSize*8192 {
+			panic(fmt.Sprintf("Expected CHR ROM size of %v, saw %v bytes remaining", cart.Header.ChrSize*8192, len(contents)))
+		}
+		cart.ChrROM = contents
+	}
+	cart.Header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
+	cart.Header.Mirroring = MirrorType((header[6] & 1) | ((header[6] & 8) >> 2))
+	cart.Header.Battery = (header[6] & 2) == 2
+	cart.Header.Trainer = (header[6] & 4) == 4
+	cart.Header.SysType = SysType(header[7] & 3)
+	cart.Header.PrgRAM = header[10]&16 == 16
+	cart.Header.PrgRAMSize = int(header[8])
+	cart.Mapper = cart.getMapper()
+	if cart.Mapper == nil {
+		fmt.Printf("Unknown mapper number %d\n", cart.Header.MapperNum)
+		return false
+	}
+
 	return true
 }
 
 //Read reads a byte from the given address in the cartridge address-space
 func (cart *NesCart) Read(addr uint16, cycle uint64) uint8 {
-	return 0
+	return cart.PrgROM[cart.Mapper.MapCpu(addr, cycle)]
 }
 
-//Write handles bytes written onto the cartridge bus
+//Write handles bytes written onto the cartridge bus by the CPU
 func (cart *NesCart) Write(addr uint16, val uint8, cycle uint64) {
+	cart.Mapper.WriteCpu(addr, val, cycle)
 }

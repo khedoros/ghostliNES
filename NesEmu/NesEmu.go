@@ -73,6 +73,8 @@ func (emu *NesEmu) InputEvent(event *sdl.Event) {
 
 func (emu *NesEmu) RunFrame() {
 	//run a frame of CPU
+	//FIXME: Timing ;-) 100 cycles definitely isn't a frame of time!
+	emu.cpu.Run(100)
 	//finish PPU render
 	//finish APU render
 }

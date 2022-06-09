@@ -61,7 +61,7 @@ func run() int {
 			case *sdl.QuitEvent:
 				running = false
 			case *sdl.KeyboardEvent:
-				fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%c\tmodifiers:%d\tstate:%d\trepeat:%d\n",
+				fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%d\tmodifiers:%d\tstate:%d\trepeat:%d\n",
 					t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
 				emulator.InputEvent(&event)
 			case *sdl.JoyAxisEvent:
@@ -91,7 +91,7 @@ func run() int {
 				}
 				fmt.Printf("Joystick %d disconnected\n", t.Which)
 			default:
-				fmt.Printf("Some event\n")
+				//fmt.Printf("Some event\n")
 			}
 
 		}

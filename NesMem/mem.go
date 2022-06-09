@@ -41,11 +41,17 @@ func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {
 	} else if addr < 0x4000 {
 		return this.ppu.Read(addr, cycle)
 	} else if addr < 0x4020 {
-		fmt.Println("read addr: %x: I/O and APU space", addr)
+		fmt.Printf("read addr: %x: I/O and APU space\n", addr)
 		return 0
 	} else {
 		return this.cart.Read(addr, cycle)
 	}
+}
+
+func (this *NesMem) Read16(addr uint16, cycle uint64) uint16 {
+	mem := uint16(this.Read(addr+1, cycle)) << 8
+	mem += uint16(this.Read(addr, cycle))
+	return mem
 }
 
 func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
@@ -54,7 +60,7 @@ func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 	} else if addr < 0x4000 {
 		this.ppu.Write(addr, val, cycle)
 	} else if addr < 0x4020 {
-		fmt.Println("write addr: %x val: %x: I/O and APU space", addr, val)
+		fmt.Printf("write addr: %x val: %x: I/O and APU space\n", addr, val)
 	} else {
 		this.cart.Write(addr, val, cycle)
 	}

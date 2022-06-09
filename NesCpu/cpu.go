@@ -2,6 +2,7 @@ package nescpu
 
 import (
 	"fmt"
+
 	nesmem "github.com/khedoros/ghostliNES/NesMem"
 )
 
@@ -9,107 +10,63 @@ type statReg struct {
 	Carry, Zero, Interrupt, Dec, Break, True, Verflow, Sign bool
 }
 
+const (
+	NMIVector = uint16(0xfffa)
+	RSTVector = uint16(0xfffc)
+	IRQVector = uint16(0xfffe)
+)
+
 //CPU6502 defines the structs necessary to hold the NES CPU's registers and table of opcodes.
 type CPU6502 struct {
 	status                  statReg
 	pc                      uint16
 	areg, xreg, yreg, spreg byte
 	mem                     *nesmem.NesMem
-	ops                     [256]func() int
+	ops                     [256]func() int64
+	frameCycle              int64
+	cycle                   uint64
 }
 
 //New initializes a CPU6502 struct with its initial values
 func (cpu *CPU6502) New(m *nesmem.NesMem) {
 	cpu.status = statReg{false, false, false, false, false, true, false, false}
 	cpu.pc = 0x0000
-	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg = 0, 0, 0, 0
+	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg, cpu.frameCycle = 0, 0, 0, 0, 0
 	fmt.Println("init'd CPU")
 	cpu.mem = m
 	for i := 0; i < 256; i++ {
-		cpu.ops[i] = cpu.opc(byte(i), addrMap[i], opMap[i])
+		cpu.ops[i] = cpu.opc(byte(i), cpu_ops[i].AddrFunc, cpu_ops[i].OpFunc)
 	}
+	cpu.pc = cpu.mem.Read16(RSTVector, 0)
+	fmt.Printf("Read address %04x and got vector %04x\n", RSTVector, cpu.pc)
+}
+
+func (cpu *CPU6502) Run(cycles int64) {
+	for cpu.frameCycle < cycles {
+		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.frameCycle))
+		fmt.Printf("PC: %04x Op %02x: ", cpu.pc, op)
+		cpu.pc += cpu_ops[op].OpSize
+		cpu.frameCycle += cpu.ops[op]()
+		fmt.Println("")
+	}
+	cpu.frameCycle -= cycles
+	cpu.cycle += uint64(cycles)
 }
 
 type CPU6502instr struct {
-	OpSize      int
-	OpTime      int
-	OpExtraTime int
-	OpFunc      func(*CPU6502, uint16) int
+	OpSize      uint16
+	OpTime      int64
+	OpExtraTime int64
+	OpFunc      func(*CPU6502, uint16) int64
 	AddrFunc    func(*CPU6502) uint16
 }
 
-var runtime = [256]int{7, 6, 0, 0, 0, 3, 5, 0, 3, 2, 2, 0, 0, 4, 6, 0,
-	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-	6, 6, 0, 0, 3, 3, 5, 0, 4, 2, 2, 0, 4, 4, 6, 0,
-	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-
-	4, 6, 0, 0, 0, 3, 5, 0, 3, 2, 2, 0, 3, 6, 6, 0,
-	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-	6, 6, 0, 0, 0, 3, 5, 0, 4, 2, 2, 0, 5, 4, 6, 0,
-	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-
-	0, 6, 0, 0, 3, 3, 3, 0, 2, 0, 2, 0, 4, 4, 4, 0,
-	2, 6, 0, 0, 4, 4, 4, 0, 2, 5, 2, 0, 0, 5, 0, 0,
-	2, 6, 2, 0, 3, 3, 3, 0, 2, 2, 2, 0, 4, 4, 4, 0,
-	2, 5, 0, 0, 4, 4, 4, 0, 2, 4, 2, 0, 4, 4, 4, 0,
-
-	2, 6, 0, 0, 3, 3, 5, 0, 2, 2, 2, 0, 4, 4, 6, 0,
-	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0,
-	2, 6, 0, 0, 3, 3, 5, 0, 2, 2, 2, 0, 4, 4, 6, 0,
-	2, 5, 0, 0, 0, 4, 6, 0, 2, 4, 0, 0, 0, 4, 7, 0}
-
-type opFunc func(*CPU6502, uint16) int
+type opFunc func(*CPU6502, uint16) int64
 type addrFunc func(*CPU6502) uint16
 
-var opUnimpl opFunc = func(cpu *CPU6502, arg uint16) int {
-	fmt.Println("Joke's on you. That function doesn't exist.")
-	return 0
+func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int64 {
+	return func() int64 { return cpu_ops[code].OpTime + o(cpu, a(cpu)) }
 }
-
-var addrUnimpl addrFunc = func(cpu *CPU6502) uint16 {
-	fmt.Println("Addressing mode unimplemented.")
-	return 0
-}
-
-func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int {
-	return func() int { return runtime[code] + o(cpu, a(cpu)) }
-}
-
-var addrMap = [256]addrFunc{
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl,
-	addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl, addrUnimpl}
-
-var opMap = [256]opFunc{
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl,
-	opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl, opUnimpl}
 
 //        void set_sign(unsigned char);                   set sign true if data >= 128 else set sign false
 //        void set_zero(unsigned char);                   set zero true if data == 0   else set zero false
