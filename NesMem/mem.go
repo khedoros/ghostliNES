@@ -37,7 +37,8 @@ func (this *NesMem) New(filename *string) {
 
 func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {
 	if addr < 0x2000 {
-		return this.ram[addr&0x800]
+		//fmt.Printf("Read %02x from %04x\n", this.ram[addr&0x7ff], addr)
+		return this.ram[addr&0x7ff]
 	} else if addr < 0x4000 {
 		return this.ppu.Read(addr, cycle)
 	} else if addr < 0x4020 {
@@ -56,7 +57,8 @@ func (this *NesMem) Read16(addr uint16, cycle uint64) uint16 {
 
 func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 	if addr < 0x2000 {
-		this.ram[addr&0x800] = val
+		//fmt.Printf("write %02x to %04x\n", val, addr)
+		this.ram[addr&0x7ff] = val
 	} else if addr < 0x4000 {
 		this.ppu.Write(addr, val, cycle)
 	} else if addr < 0x4020 {

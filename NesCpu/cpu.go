@@ -31,9 +31,10 @@ type CPU6502 struct {
 
 //New initializes a CPU6502 struct with its initial values
 func (cpu *CPU6502) New(m *nesmem.NesMem) {
-	cpu.status = statReg{false, false, false, false, false, true, false, false}
+	cpu.status = statReg{Carry: false, Zero: false, Interrupt: true, Dec: false, Break: false, True: true, Verflow: false, Sign: false}
+	cpu.negFlagNote, cpu.zeroFlagNote = 0, 1
 	cpu.pc = 0x0000
-	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg, cpu.frameCycle = 0, 0, 0, 0, 0
+	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg, cpu.frameCycle = 0, 0, 0, 0xfd, 0
 	fmt.Println("init'd CPU")
 	cpu.mem = m
 	for i := 0; i < 256; i++ {
@@ -48,14 +49,17 @@ func (cpu *CPU6502) Run(cycles int64) {
 		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.cycle))
 		switch cpu_ops[op].OpSize {
 		case 1:
-			fmt.Printf("%04x: %02x\n", cpu.pc, op)
+			fmt.Printf("%04X  %02X      ", cpu.pc, op)
 		case 2:
-			fmt.Printf("%04x: %02x %02x\n", cpu.pc, op, cpu.mem.Read(cpu.pc+1, cpu.cycle))
+			fmt.Printf("%04X  %02X %02X   ", cpu.pc, op, cpu.mem.Read(cpu.pc+1, cpu.cycle))
 		case 3:
-			fmt.Printf("%04x: %02x %04x\n", cpu.pc, op, cpu.mem.Read16(cpu.pc+1, cpu.cycle))
+			tmp := cpu.mem.Read16(cpu.pc+1, cpu.cycle)
+			fmt.Printf("%04X  %02X %02X %02X", cpu.pc, op, tmp&0xff, tmp>>8)
 		default:
-			panic(fmt.Sprintf("%04x: %02x is an invalid operation\n", cpu.pc, op))
+			panic(fmt.Sprintf("%04x  %02x is an invalid operation\n", cpu.pc, op))
 		}
+		//A:00 X:00 Y:00 P:26 SP:FB
+		fmt.Printf("    A:%02X X:%02X Y:%02X P:%02X SP:%02X\n", cpu.areg, cpu.xreg, cpu.yreg, cpu.getStatus(), cpu.spreg)
 		cpu.pc += cpu_ops[op].OpSize
 		opCycles := cpu.ops[op]()
 		cpu.frameCycle += opCycles
@@ -88,3 +92,70 @@ func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int64 {
 //        void push2(unsigned int val); write high to 0x100+sp, dec sp, write low to 0x100+sp, dec sp
 //        unsigned int pop(); inc sp, read value from 0x100+sp
 //        unsigned int pop2(); inc sp, read low from 0x100+sp, inc sp, read hi from 0x100+sp
+
+func (cpu *CPU6502) push2(val uint16) {
+	low := byte(val & 0xff)
+	high := byte(val >> 8)
+	//fmt.Printf("Push2 %02x %02x to %04x and %04x\n", high, low, 0x100+uint16(cpu.spreg), 0x100+uint16(cpu.spreg-1))
+	cpu.mem.Write(uint16(0x100)+uint16(cpu.spreg), high, cpu.cycle)
+	cpu.spreg--
+	cpu.mem.Write(uint16(0x100)+uint16(cpu.spreg), low, cpu.cycle)
+	cpu.spreg--
+}
+
+func (cpu *CPU6502) push(val byte) {
+	//fmt.Printf("Push1 %02x to %04x\n", val, 0x100+uint16(cpu.spreg))
+	cpu.mem.Write(uint16(0x100)+uint16(cpu.spreg), val, cpu.cycle)
+	cpu.spreg--
+}
+
+func (cpu *CPU6502) pop2() uint16 {
+	cpu.spreg++
+	low := cpu.mem.Read(uint16(0x100)+uint16(cpu.spreg), cpu.cycle)
+	cpu.spreg++
+	high := cpu.mem.Read(uint16(0x100)+uint16(cpu.spreg), cpu.cycle)
+	//fmt.Printf("Pop2 %02x %02x from %04x and %04x\n", high, low, 0x100+uint16(cpu.spreg), 0x100+uint16(cpu.spreg-1))
+	return (uint16(low) + (uint16(high) << 8))
+}
+
+func (cpu *CPU6502) pop() byte {
+	cpu.spreg++
+	val := cpu.mem.Read(uint16(0x100)+uint16(cpu.spreg), cpu.cycle)
+	//fmt.Printf("Pop1 %02x from %04x\n", val, 0x100+uint16(cpu.spreg))
+	return val
+}
+
+func (cpu *CPU6502) getStatus() byte {
+	status := cpu.negFlagNote & 0x80
+	if cpu.status.Carry {
+		status |= 1
+	}
+	if cpu.zeroFlagNote == 0 {
+		status |= 2
+	}
+	if cpu.status.Interrupt {
+		status |= 4
+	}
+	if cpu.status.Dec {
+		status |= 8
+	}
+	status |= 0x20
+	if cpu.status.Verflow {
+		status |= 0x40
+	}
+	return status
+}
+
+func (cpu *CPU6502) setStatus(status byte) {
+	cpu.negFlagNote = status
+	cpu.status.Verflow = status&0x40 == 0x40
+	cpu.status.Break = status&0x10 == 0x10
+	cpu.status.Dec = status&0x08 == 0x08
+	cpu.status.Interrupt = status&0x04 == 0x04
+	if status&2 == 2 {
+		cpu.zeroFlagNote = 0
+	} else {
+		cpu.zeroFlagNote = 1
+	}
+	cpu.status.Carry = status&0x01 == 0x01
+}

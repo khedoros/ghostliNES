@@ -191,7 +191,15 @@ func (cart *NesCart) Load(filename *string) bool {
 	}
 	fmt.Println("")
 	cart.Header.PrgSize = int(header[4])
-	cart.PrgROM = contents[:16384*cart.Header.PrgSize]
+	if cart.Header.PrgSize == 1 {
+		cart.PrgROM = make([]uint8, 32768)
+		for i := 0; i < 16384; i++ {
+			cart.PrgROM[i] = contents[i]
+			cart.PrgROM[i+16384] = contents[i]
+		}
+	} else {
+		cart.PrgROM = contents[:16384*cart.Header.PrgSize]
+	}
 	contents = contents[16384*cart.Header.PrgSize:]
 	cart.Header.ChrSize = int(header[5])
 	if cart.Header.ChrSize == 0 {
