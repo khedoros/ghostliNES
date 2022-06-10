@@ -25,6 +25,8 @@ type CPU6502 struct {
 	ops                     [256]func() int64
 	frameCycle              int64
 	cycle                   uint64
+	zeroFlagNote            byte
+	negFlagNote             byte
 }
 
 //New initializes a CPU6502 struct with its initial values
@@ -43,14 +45,23 @@ func (cpu *CPU6502) New(m *nesmem.NesMem) {
 
 func (cpu *CPU6502) Run(cycles int64) {
 	for cpu.frameCycle < cycles {
-		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.frameCycle))
-		fmt.Printf("PC: %04x Op %02x: ", cpu.pc, op)
+		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.cycle))
+		switch cpu_ops[op].OpSize {
+		case 1:
+			fmt.Printf("%04x: %02x\n", cpu.pc, op)
+		case 2:
+			fmt.Printf("%04x: %02x %02x\n", cpu.pc, op, cpu.mem.Read(cpu.pc+1, cpu.cycle))
+		case 3:
+			fmt.Printf("%04x: %02x %04x\n", cpu.pc, op, cpu.mem.Read16(cpu.pc+1, cpu.cycle))
+		default:
+			panic(fmt.Sprintf("%04x: %02x is an invalid operation\n", cpu.pc, op))
+		}
 		cpu.pc += cpu_ops[op].OpSize
-		cpu.frameCycle += cpu.ops[op]()
-		fmt.Println("")
+		opCycles := cpu.ops[op]()
+		cpu.frameCycle += opCycles
+		cpu.cycle += uint64(opCycles)
 	}
 	cpu.frameCycle -= cycles
-	cpu.cycle += uint64(cycles)
 }
 
 type CPU6502instr struct {
