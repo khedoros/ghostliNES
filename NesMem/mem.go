@@ -21,7 +21,7 @@ func (this *NesMem) InputEvent(event *sdl.Event) {
 
 }
 
-func (this *NesMem) New(filename *string, mapper int, ppu *nesppu.NesPpu, resolution int, apu *nesapu.NesApu) {
+func (this *NesMem) New(filename *string, mapper int, ppu *nesppu.NesPpu, apu *nesapu.NesApu) {
 	this.cart = &nescart.NesCart{}
 	fmt.Println("Loading file ", *filename)
 	valid := this.cart.Load(filename)

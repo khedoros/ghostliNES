@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"strings"
+
+	mappers "github.com/khedoros/ghostliNES/NesCart/NesMappers"
 )
 
 // Equal tells whether a and b contain the same elements.
@@ -19,14 +21,6 @@ func Equal(a, b []byte) bool {
 		}
 	}
 	return true
-}
-
-//A Mapper handles mapping pages of data in a ROM to their physical addresses, visible to the CPU and PPU
-type Mapper interface {
-	MapCpu(addr uint16, cycle uint64) uint16
-	MapPpu(addr uint16, cycle uint64) uint16
-	WriteCpu(addr uint16, val uint8, cycle uint64)
-	New(cart *NesCart)
 }
 
 //NesHeader defines the 16-byte structure that makes up the iNES header in most NES ROMs
@@ -55,7 +49,7 @@ type NesCart struct {
 	PrgROM []uint8
 	ChrROM []uint8
 	SRAM   []uint8
-	Mapper Mapper
+	Mapper mappers.Mapper
 	Header NesHeader
 }
 
@@ -109,32 +103,14 @@ const (
 	UNSUPPORTED
 )
 
-func (cart *NesCart) getMapper() Mapper {
-	var mapper Mapper = nil
+func (cart *NesCart) getMapper() mappers.Mapper {
+	var mapper mappers.Mapper = nil
 	switch cart.Header.MapperNum {
 	case 0:
-		mapper = nromMapper{}
+		mapper = mappers.NromMapper{}
 		fmt.Println("NROM Mapper")
 	}
 	return mapper
-}
-
-type nromMapper struct {
-	cart *NesCart
-}
-
-func (m nromMapper) MapCpu(addr uint16, cycle uint64) uint16 {
-	return addr - 0x8000
-}
-
-func (m nromMapper) MapPpu(addr uint16, cycle uint64) uint16 {
-	return addr
-}
-
-func (m nromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
-
-func (m nromMapper) New(cart *NesCart) {
-	m.cart = cart
 }
 
 //SysType describes the type of NES-related machine that the ROM is for
@@ -234,5 +210,15 @@ func (cart *NesCart) Read(addr uint16, cycle uint64) uint8 {
 
 //Write handles bytes written onto the cartridge bus by the CPU
 func (cart *NesCart) Write(addr uint16, val uint8, cycle uint64) {
+	cart.Mapper.WriteCpu(addr, val, cycle)
+}
+
+//ReadPpu reads a byte from the given address in the cartridge address-space
+func (cart *NesCart) ReadPpu(addr uint16, cycle uint64) uint8 {
+	return cart.PrgROM[cart.Mapper.MapCpu(addr, cycle)]
+}
+
+//WritePpu handles bytes written onto the cartridge bus by the CPU
+func (cart *NesCart) WritePpu(addr uint16, val uint8, cycle uint64) {
 	cart.Mapper.WriteCpu(addr, val, cycle)
 }

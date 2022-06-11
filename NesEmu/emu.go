@@ -55,9 +55,9 @@ func (emu *NesEmu) New() error {
 	emu.filename = flag.Arg(0)
 	fmt.Printf("Options\n--------\nDebug: %v\nResolution: %v\nMapper: %v\nFile: %v\n", emu.debug, emu.resolution, emu.mapper, emu.filename)
 
-	emu.mem.New(&emu.filename, emu.mapper, &emu.ppu, emu.resolution, &emu.apu)
+	emu.mem.New(&emu.filename, emu.mapper, &emu.ppu, &emu.apu)
 	emu.cpu.New(&emu.mem)
-	emu.ppu.New(emu.mem.GetCart(), emu.resolution)
+	emu.ppu.New(emu.mem.GetCart())
 	emu.apu.New()
 
 	return nil
@@ -73,10 +73,12 @@ func (emu *NesEmu) InputEvent(event *sdl.Event) {
 
 func (emu *NesEmu) RunFrame() {
 	//run a frame of CPU
-	//FIXME: Timing ;-) 100 cycles definitely isn't a frame of time!
-	emu.cpu.Run(100)
+	opChunk := int64(10000)
+	emu.cpu.Run(opChunk)
 	//finish PPU render
+	emu.ppu.Run(opChunk)
 	//finish APU render
+
 }
 
 func (emu *NesEmu) GetFrame() *sdl.Surface {
