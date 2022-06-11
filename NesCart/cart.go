@@ -107,8 +107,41 @@ func (cart *NesCart) getMapper() mappers.Mapper {
 	var mapper mappers.Mapper = nil
 	switch cart.Header.MapperNum {
 	case 0:
-		mapper = mappers.NromMapper{}
+		mapper = &mappers.NromMapper{}
 		fmt.Println("NROM Mapper")
+	case 1:
+		mapper = &mappers.Mmc1Mapper{}
+		fmt.Println("MMC1 Mapper")
+	case 2:
+		mapper = &mappers.UnromMapper{}
+		fmt.Println("UNROM Mapper")
+	case 3:
+		mapper = &mappers.CnromMapper{}
+		fmt.Println("CNROM Mapper")
+	case 4:
+		mapper = &mappers.Mmc3Mapper{}
+		fmt.Println("MMC3 Mapper")
+	case 5:
+		mapper = &mappers.Mmc5Mapper{}
+		fmt.Println("MMC5 Mapper")
+	case 7:
+		mapper = &mappers.AoromMapper{}
+		fmt.Println("AOROM Mapper")
+	case 9:
+		mapper = &mappers.Mmc2Mapper{}
+		fmt.Println("MMC2 Mapper")
+	case 11:
+		mapper = &mappers.ColorDreamsMapper{}
+		fmt.Println("Color Dreams Mapper")
+	case 19:
+		mapper = &mappers.NamcoMapper{}
+		fmt.Println("Namco Mapper")
+	case 64:
+		mapper = &mappers.Rambo1Mapper{}
+		fmt.Println("Rambo-1 Mapper")
+	case 66:
+		mapper = &mappers.GnromMapper{}
+		fmt.Println("GNROM Mapper")
 	}
 	return mapper
 }
@@ -167,15 +200,7 @@ func (cart *NesCart) Load(filename *string) bool {
 	}
 	fmt.Println("")
 	cart.Header.PrgSize = int(header[4])
-	if cart.Header.PrgSize == 1 {
-		cart.PrgROM = make([]uint8, 32768)
-		for i := 0; i < 16384; i++ {
-			cart.PrgROM[i] = contents[i]
-			cart.PrgROM[i+16384] = contents[i]
-		}
-	} else {
-		cart.PrgROM = contents[:16384*cart.Header.PrgSize]
-	}
+	cart.PrgROM = contents[:16384*cart.Header.PrgSize]
 	contents = contents[16384*cart.Header.PrgSize:]
 	cart.Header.ChrSize = int(header[5])
 	if cart.Header.ChrSize == 0 {
@@ -199,6 +224,7 @@ func (cart *NesCart) Load(filename *string) bool {
 		fmt.Printf("Unknown mapper number %d\n", cart.Header.MapperNum)
 		return false
 	}
+	cart.Mapper.New(uint(len(cart.PrgROM)), uint(len(cart.ChrROM)))
 
 	return true
 }

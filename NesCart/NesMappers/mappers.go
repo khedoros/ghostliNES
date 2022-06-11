@@ -5,5 +5,5 @@ type Mapper interface {
 	MapCpu(addr uint16, cycle uint64) uint
 	MapPpu(addr uint16, cycle uint64) uint
 	WriteCpu(addr uint16, val uint8, cycle uint64)
-	New()
+	New(prgROM, chrROM uint)
 }
