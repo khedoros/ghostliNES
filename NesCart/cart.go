@@ -100,46 +100,49 @@ const (
 	HOMEBREW
 	UNROM512
 	NSF
+	RAMBO1 = iota + 32
+	H3001
+	GNROM
 	UNSUPPORTED
 )
 
 func (cart *NesCart) getMapper() mappers.Mapper {
 	var mapper mappers.Mapper = nil
 	switch cart.Header.MapperNum {
-	case 0:
+	case NROM:
 		mapper = &mappers.NromMapper{}
 		fmt.Println("NROM Mapper")
-	case 1:
+	case MMC1:
 		mapper = &mappers.Mmc1Mapper{}
 		fmt.Println("MMC1 Mapper")
-	case 2:
+	case UxROM:
 		mapper = &mappers.UnromMapper{}
 		fmt.Println("UNROM Mapper")
-	case 3:
+	case CNROM:
 		mapper = &mappers.CnromMapper{}
 		fmt.Println("CNROM Mapper")
-	case 4:
+	case MMC3:
 		mapper = &mappers.Mmc3Mapper{}
 		fmt.Println("MMC3 Mapper")
-	case 5:
+	case MMC5:
 		mapper = &mappers.Mmc5Mapper{}
 		fmt.Println("MMC5 Mapper")
-	case 7:
+	case AxROM:
 		mapper = &mappers.AoromMapper{}
 		fmt.Println("AOROM Mapper")
-	case 9:
+	case MMC2:
 		mapper = &mappers.Mmc2Mapper{}
 		fmt.Println("MMC2 Mapper")
-	case 11:
+	case COLORDREAMS:
 		mapper = &mappers.ColorDreamsMapper{}
 		fmt.Println("Color Dreams Mapper")
-	case 19:
+	case NAMCO:
 		mapper = &mappers.NamcoMapper{}
 		fmt.Println("Namco Mapper")
-	case 64:
+	case RAMBO1:
 		mapper = &mappers.Rambo1Mapper{}
 		fmt.Println("Rambo-1 Mapper")
-	case 66:
+	case GNROM:
 		mapper = &mappers.GnromMapper{}
 		fmt.Println("GNROM Mapper")
 	}
