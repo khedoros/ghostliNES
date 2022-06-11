@@ -7,7 +7,7 @@ import (
 )
 
 type statReg struct {
-	Carry, Zero, Interrupt, Dec, Break, True, Verflow, Sign bool
+	Carry, Zero, Interrupt, Dec, True, Verflow, Sign bool
 }
 
 const (
@@ -31,7 +31,7 @@ type CPU6502 struct {
 
 //New initializes a CPU6502 struct with its initial values
 func (cpu *CPU6502) New(m *nesmem.NesMem) {
-	cpu.status = statReg{Carry: false, Zero: false, Interrupt: true, Dec: false, Break: false, True: true, Verflow: false, Sign: false}
+	cpu.status = statReg{Carry: false, Zero: false, Interrupt: true, Dec: false, True: true, Verflow: false, Sign: false}
 	cpu.negFlagNote, cpu.zeroFlagNote = 0, 1
 	cpu.pc = 0x0000
 	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg, cpu.frameCycle = 0, 0, 0, 0xfd, 0
@@ -47,19 +47,20 @@ func (cpu *CPU6502) New(m *nesmem.NesMem) {
 func (cpu *CPU6502) Run(cycles int64) {
 	for cpu.frameCycle < cycles {
 		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.cycle))
-		switch cpu_ops[op].OpSize {
-		case 1:
-			fmt.Printf("%04X  %02X      ", cpu.pc, op)
-		case 2:
-			fmt.Printf("%04X  %02X %02X   ", cpu.pc, op, cpu.mem.Read(cpu.pc+1, cpu.cycle))
-		case 3:
-			tmp := cpu.mem.Read16(cpu.pc+1, cpu.cycle)
-			fmt.Printf("%04X  %02X %02X %02X", cpu.pc, op, tmp&0xff, tmp>>8)
-		default:
-			panic(fmt.Sprintf("%04x  %02x is an invalid operation\n", cpu.pc, op))
-		}
-		//A:00 X:00 Y:00 P:26 SP:FB
-		fmt.Printf("    A:%02X X:%02X Y:%02X P:%02X SP:%02X\n", cpu.areg, cpu.xreg, cpu.yreg, cpu.getStatus(), cpu.spreg)
+		/*
+			switch cpu_ops[op].OpSize {
+			case 1:
+				fmt.Printf("%04X  %02X      ", cpu.pc, op)
+			case 2:
+				fmt.Printf("%04X  %02X %02X   ", cpu.pc, op, cpu.mem.Read(cpu.pc+1, cpu.cycle))
+			case 3:
+				tmp := cpu.mem.Read16(cpu.pc+1, cpu.cycle)
+				fmt.Printf("%04X  %02X %02X %02X", cpu.pc, op, tmp&0xff, tmp>>8)
+			default:
+				panic(fmt.Sprintf("%04x  %02x is an invalid operation\n", cpu.pc, op))
+			}
+			fmt.Printf("    A:%02X X:%02X Y:%02X P:%02X SP:%02X\n", cpu.areg, cpu.xreg, cpu.yreg, cpu.getStatus(), cpu.spreg)
+		*/
 		cpu.pc += cpu_ops[op].OpSize
 		opCycles := cpu.ops[op]()
 		cpu.frameCycle += opCycles
@@ -82,16 +83,6 @@ type addrFunc func(*CPU6502) uint16
 func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int64 {
 	return func() int64 { return cpu_ops[code].OpTime + o(cpu, a(cpu)) }
 }
-
-//        void set_sign(unsigned char);                   set sign true if data >= 128 else set sign false
-//        void set_zero(unsigned char);                   set zero true if data == 0   else set zero false
-//        void set_carry(unsigned char);                  set carry true if data != 0 else set carry false
-//        void set_verflow(unsigned char, unsigned char); umm...no-op, apparently? probably not correct for the system...
-
-//        void push(unsigned char val); write value to 0x100 + sp, dec sp
-//        void push2(unsigned int val); write high to 0x100+sp, dec sp, write low to 0x100+sp, dec sp
-//        unsigned int pop(); inc sp, read value from 0x100+sp
-//        unsigned int pop2(); inc sp, read low from 0x100+sp, inc sp, read hi from 0x100+sp
 
 func (cpu *CPU6502) push2(val uint16) {
 	low := byte(val & 0xff)
@@ -149,7 +140,6 @@ func (cpu *CPU6502) getStatus() byte {
 func (cpu *CPU6502) setStatus(status byte) {
 	cpu.negFlagNote = status
 	cpu.status.Verflow = status&0x40 == 0x40
-	cpu.status.Break = status&0x10 == 0x10
 	cpu.status.Dec = status&0x08 == 0x08
 	cpu.status.Interrupt = status&0x04 == 0x04
 	if status&2 == 2 {

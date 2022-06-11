@@ -21,7 +21,7 @@ func (this *NesMem) InputEvent(event *sdl.Event) {
 
 }
 
-func (this *NesMem) New(filename *string) {
+func (this *NesMem) New(filename *string, mapper int, ppu *nesppu.NesPpu, resolution int, apu *nesapu.NesApu) {
 	this.cart = &nescart.NesCart{}
 	fmt.Println("Loading file ", *filename)
 	valid := this.cart.Load(filename)
@@ -30,9 +30,6 @@ func (this *NesMem) New(filename *string) {
 	} else {
 		fmt.Println("Loaded ROM.")
 	}
-
-	this.apu = &nesapu.NesApu{}
-	this.ppu = &nesppu.NesPpu{}
 }
 
 func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {

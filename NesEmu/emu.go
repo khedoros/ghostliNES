@@ -55,7 +55,7 @@ func (emu *NesEmu) New() error {
 	emu.filename = flag.Arg(0)
 	fmt.Printf("Options\n--------\nDebug: %v\nResolution: %v\nMapper: %v\nFile: %v\n", emu.debug, emu.resolution, emu.mapper, emu.filename)
 
-	emu.mem.New(&emu.filename)
+	emu.mem.New(&emu.filename, emu.mapper, &emu.ppu, emu.resolution, &emu.apu)
 	emu.cpu.New(&emu.mem)
 	emu.ppu.New(emu.mem.GetCart(), emu.resolution)
 	emu.apu.New()
