@@ -29,9 +29,10 @@ type NesHeader struct {
 	ChrSize      int        //byte 5, 8KB units
 	ChrRAM       bool       //byte 5 == 0
 	MapperNum    MapperType //high-4 of byte 6 (low)  and high-4 of byte 7 (high)
-	Mirroring    MirrorType //byte 6 bit 0 and bit 3
+	Mirroring    MirrorType //byte 6 bit 0 (0 == H-Mirror, 1 == V-Mirror)
 	Battery      bool       //byte 6 bit 1
 	Trainer      bool       //byte 6 bit 2
+	FourScreen   bool       //byte 6 bit 3 (0 == no extra RAM, 1 == extra RAM?)
 	SysType      SysType    //byte 7 bits 0,1
 	PrgRAM       bool       //byte 10 bit 4
 	PrgRAMSize   int        //byte 8, 8KB units
@@ -46,11 +47,11 @@ type NesHeader struct {
 
 //NesCart holds the actual data for an NES ROM file and save data
 type NesCart struct {
-	PrgROM []uint8
-	ChrROM []uint8
-	SRAM   []uint8
-	Mapper mappers.Mapper
-	Header NesHeader
+	prgROM []uint8
+	chrROM []uint8
+	sRAM   []uint8
+	mapper mappers.Mapper
+	header NesHeader
 }
 
 //MirrorType is the type of graphics memory mirroring that the cartridge is currently configured to use
@@ -60,7 +61,6 @@ type MirrorType int
 const (
 	HMIRROR MirrorType = iota
 	VMIRROR
-	FOURSCREEN
 )
 
 //MapperType is an enum of constants giving the mapper numbers symbolic names.
@@ -108,7 +108,7 @@ const (
 
 func (cart *NesCart) getMapper() mappers.Mapper {
 	var mapper mappers.Mapper = nil
-	switch cart.Header.MapperNum {
+	switch cart.header.MapperNum {
 	case NROM:
 		mapper = &mappers.NromMapper{}
 		fmt.Println("NROM Mapper")
@@ -202,52 +202,59 @@ func (cart *NesCart) Load(filename *string) bool {
 		fmt.Printf("%02x ", c)
 	}
 	fmt.Println("")
-	cart.Header.PrgSize = int(header[4])
-	cart.PrgROM = contents[:16384*cart.Header.PrgSize]
-	contents = contents[16384*cart.Header.PrgSize:]
-	cart.Header.ChrSize = int(header[5])
-	if cart.Header.ChrSize == 0 {
-		cart.Header.ChrRAM = true
-		cart.ChrROM = make([]uint8, 8292)
+	cart.header.PrgSize = int(header[4])
+	cart.prgROM = contents[:16384*cart.header.PrgSize]
+	contents = contents[16384*cart.header.PrgSize:]
+	cart.header.ChrSize = int(header[5])
+	if cart.header.ChrSize == 0 {
+		cart.header.ChrRAM = true
+		cart.chrROM = make([]uint8, 8192)
 	} else {
-		if len(contents) != cart.Header.ChrSize*8192 {
-			panic(fmt.Sprintf("Expected CHR ROM size of %v, saw %v bytes remaining", cart.Header.ChrSize*8192, len(contents)))
+		if len(contents) != cart.header.ChrSize*8192 {
+			panic(fmt.Sprintf("Expected CHR ROM size of %v, saw %v bytes remaining", cart.header.ChrSize*8192, len(contents)))
 		}
-		cart.ChrROM = contents
+		cart.chrROM = contents
 	}
-	cart.Header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
-	cart.Header.Mirroring = MirrorType((header[6] & 1) | ((header[6] & 8) >> 2))
-	cart.Header.Battery = (header[6] & 2) == 2
-	cart.Header.Trainer = (header[6] & 4) == 4
-	cart.Header.SysType = SysType(header[7] & 3)
-	cart.Header.PrgRAM = header[10]&16 == 16
-	cart.Header.PrgRAMSize = int(header[8])
-	cart.Mapper = cart.getMapper()
-	if cart.Mapper == nil {
-		fmt.Printf("Unknown mapper number %d\n", cart.Header.MapperNum)
+	cart.header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
+	cart.header.Mirroring = MirrorType(header[6] & 1)
+	cart.header.Battery = (header[6] & 2) == 2
+	cart.header.Trainer = (header[6] & 4) == 4
+	cart.header.FourScreen = (header[6] & 8) == 8
+
+	// Info beyond this point is "iffy"
+	cart.header.SysType = SysType(header[7] & 3)
+	cart.header.PrgRAMSize = int(header[8])
+	cart.header.PrgRAM = header[10]&16 == 16
+
+	// Mapper number from bytes 6 and 7 needs to be accurate
+	cart.mapper = cart.getMapper()
+	if cart.mapper == nil {
+		fmt.Printf("Unknown mapper number %d\n", cart.header.MapperNum)
 		return false
 	}
-	cart.Mapper.New(uint(len(cart.PrgROM)), uint(len(cart.ChrROM)))
+	cart.mapper.New(uint(len(cart.prgROM)), uint(len(cart.chrROM)))
 
 	return true
 }
 
 //Read reads a byte from the given address in the cartridge address-space
 func (cart *NesCart) Read(addr uint16, cycle uint64) uint8 {
-	return cart.PrgROM[cart.Mapper.MapCpu(addr, cycle)]
+	return cart.prgROM[cart.mapper.MapCpu(addr, cycle)]
 }
 
 //Write handles bytes written onto the cartridge bus by the CPU
 func (cart *NesCart) Write(addr uint16, val uint8, cycle uint64) {
-	cart.Mapper.WriteCpu(addr, val, cycle)
+	cart.mapper.WriteCpu(addr, val, cycle)
 }
 
 //ReadPpu reads a byte from the given address in the cartridge address-space
 func (cart *NesCart) ReadPpu(addr uint16, cycle uint64) uint8 {
-	return cart.PrgROM[cart.Mapper.MapCpu(addr, cycle)]
+	return cart.chrROM[cart.mapper.MapPpu(addr, cycle)]
 }
 
-//WritePpu handles bytes written onto the cartridge bus by the CPU
+//WritePpu handles bytes written onto the cartridge bus by the PPU
 func (cart *NesCart) WritePpu(addr uint16, val uint8, cycle uint64) {
-	cart.Mapper.WriteCpu(addr, val, cycle)
+	if cart.header.ChrRAM {
+		cart.chrROM[cart.mapper.MapPpu(addr, cycle)] = val
+	}
 }
