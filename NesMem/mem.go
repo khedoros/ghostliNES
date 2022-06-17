@@ -23,6 +23,8 @@ func (this *NesMem) InputEvent(event *sdl.Event) {
 
 func (this *NesMem) New(filename *string, mapper int, ppu *nesppu.NesPpu, apu *nesapu.NesApu) {
 	this.cart = &nescart.NesCart{}
+	this.ppu = ppu
+	this.apu = apu
 	fmt.Println("Loading file ", *filename)
 	valid := this.cart.Load(filename)
 	if !valid {
@@ -30,6 +32,10 @@ func (this *NesMem) New(filename *string, mapper int, ppu *nesppu.NesPpu, apu *n
 	} else {
 		fmt.Println("Loaded ROM.")
 	}
+}
+
+func (this *NesMem) IsPpuNmi(cycle uint64) bool {
+	return this.ppu.IsNmi(cycle)
 }
 
 func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {

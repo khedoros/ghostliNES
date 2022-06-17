@@ -65,6 +65,10 @@ func (cpu *CPU6502) Run(cycles int64) {
 		opCycles := cpu.ops[op]()
 		cpu.frameCycle += opCycles
 		cpu.cycle += uint64(opCycles)
+
+		if cpu.mem.IsPpuNmi(cpu.cycle) {
+			cpu.nmi()
+		}
 	}
 	cpu.frameCycle -= cycles
 }
@@ -79,6 +83,20 @@ type CPU6502instr struct {
 
 type opFunc func(*CPU6502, uint16) int64
 type addrFunc func(*CPU6502) uint16
+
+func (cpu *CPU6502) nmi() {
+	cpu.push2(cpu.pc)
+	cpu.push(cpu.getStatus())
+	cpu.status.Interrupt = true
+	cpu.pc = cpu.mem.Read16(NMIVector, cpu.cycle)
+}
+
+func (cpu *CPU6502) irq() {
+	cpu.push2(cpu.pc)
+	cpu.push(cpu.getStatus())
+	cpu.status.Interrupt = true
+	cpu.pc = cpu.mem.Read16(IRQVector, cpu.cycle)
+}
 
 func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int64 {
 	return func() int64 { return cpu_ops[code].OpTime + o(cpu, a(cpu)) }

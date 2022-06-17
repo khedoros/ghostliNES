@@ -1,28 +1,38 @@
 package nesppu
 
 import (
+	"fmt"
+
 	nescart "github.com/khedoros/ghostliNES/NesCart"
 )
 
+type ctrl1Reg uint8
+type ctrl2Reg uint8
+type statReg uint8
+
 //An NesPpu represents an NES's Picture Processing Unit
 type NesPpu struct {
-	frameCycle int
-	cart       *nescart.NesCart
-	vram       [2048]uint8
-	sprRam     [256]uint8
-	palRam     [32]uint8
-	vramPtr    uint16
-	vramLatch  bool
-	fineX      uint8
-	control1   uint8 // $2000 (W)
-	control2   uint8 // $2001 (W)
-	status     uint8 // $2002 (R)
-	sprAddr    uint8 // $2003 (W)
-	sprData    uint8 // $2004 (RW)
-	vramAddr1  uint8 // $2005 (W)
-	vramAddr2  uint8 // $2006 (W)
-	vramData   uint8 // $2007 (RW)
-	sprDMA     uint8 // $4014 (W)
+	frameCycle        uint
+	cyclesPerFrame    uint
+	linesPerFrame     uint
+	cyclesBeforeVSync uint
+	cpuPpuClockFactor uint
+	cart              *nescart.NesCart
+	vram              [2048]uint8
+	sprRam            [256]uint8
+	palRam            [32]uint8
+	vramPtr           uint16
+	vramLatch         bool
+	fineX             uint8
+	control1          ctrl1Reg // $2000 (W)
+	control2          ctrl2Reg // $2001 (W)
+	status            statReg  // $2002 (R)
+	sprAddr           uint8    // $2003 (W)
+	sprData           uint8    // $2004 (RW)
+	vramAddr1         uint8    // $2005 (W)
+	vramAddr2         uint8    // $2006 (W)
+	vramData          uint8    // $2007 (RW)
+	sprDMA            uint8    // $4014 (W)
 }
 
 const (
@@ -31,23 +41,25 @@ const (
 	preRenderLines  = 1
 	postRenderLines = 1
 
-	// NTSC values
-	masterClockPal     = 26601712
-	cpuClockDividerPal = 16
-	ppuClockDividerPal = 5
-	visibleLinesPal    = 240
-	vblankLinesPal     = 70
-	linesPerFramePal   = 312
-	cyclesPerFramePal  = (preRenderLines + visibleLinesPal + postRenderLines + vblankLinesPal) * cyclesPerLine
-
 	// PAL values
-	masterClockNtsc     = 21477272
-	cpuClockDividerNtsc = 12
-	ppuClockDividerNtsc = 4
-	visibleLinesNtsc    = 240
-	vblankLinesNtsc     = 20
-	linesPerFrameNtsc   = 262
-	cyclesPerFrameNtsc  = (preRenderLines + visibleLinesNtsc + postRenderLines + vblankLinesNtsc) * cyclesPerLine
+	masterClockPal       = 26601712
+	cpuClockDividerPal   = 16
+	ppuClockDividerPal   = 5
+	visibleLinesPal      = 240
+	vblankLinesPal       = 70
+	linesPerFramePal     = 312
+	cyclesBeforeVSyncPal = (preRenderLines + visibleLinesPal + postRenderLines) * cyclesPerLine
+	cyclesPerFramePal    = (preRenderLines + visibleLinesPal + postRenderLines + vblankLinesPal) * cyclesPerLine
+
+	// NTSC values
+	masterClockNtsc       = 21477272
+	cpuClockDividerNtsc   = 12
+	ppuClockDividerNtsc   = 4
+	visibleLinesNtsc      = 240
+	vblankLinesNtsc       = 20
+	linesPerFrameNtsc     = 262
+	cyclesBeforeVSyncNtsc = (preRenderLines + visibleLinesNtsc + postRenderLines) * cyclesPerLine
+	cyclesPerFrameNtsc    = (preRenderLines + visibleLinesNtsc + postRenderLines + vblankLinesNtsc) * cyclesPerLine
 
 	// Registers
 	ppuControl1  = 0x2000
@@ -71,9 +83,18 @@ const (
 
 func (this *NesPpu) New(mem *nescart.NesCart) {
 	this.cart = mem
+	this.cyclesPerFrame = cyclesPerFrameNtsc
+	this.cyclesBeforeVSync = cyclesBeforeVSyncNtsc
+	this.linesPerFrame = linesPerFrameNtsc
+	this.cpuPpuClockFactor = cpuClockDividerNtsc / ppuClockDividerNtsc
 }
 
-func (this *NesPpu) IsNmi(cycles int64) bool {
+func (this *NesPpu) IsNmi(cycles uint64) bool {
+	if (this.control1)&0x80 > 0 { // If NMI is enabled
+		cycles *= uint64(this.cpuPpuClockFactor)
+		cycles %= uint64(this.cyclesPerFrame)
+		return cycles > uint64(this.cyclesBeforeVSync)
+	}
 	return false
 }
 
@@ -90,6 +111,7 @@ func (this *NesPpu) Run(cycles int64) int64 {
 
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
+	fmt.Printf("Read PPU %04x\n", addr)
 	switch addr {
 	case ppuStatus:
 		return 0x80
@@ -104,11 +126,12 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 
 // CPU interface to write to externally-accessible registers
 func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
+	fmt.Printf("Write PPU %04x = %02x\n", addr, val)
 	switch addr {
 	case ppuControl1:
-		this.control1 = val
+		this.control1 = ctrl1Reg(val)
 	case ppuControl2:
-		this.control2 = val
+		this.control2 = ctrl2Reg(val)
 	case ppuSprAddr:
 		this.sprAddr = val
 	case ppuSprData:

@@ -143,7 +143,7 @@ func opBrk(cpu *CPU6502, arg uint16) int64 {
 	cpu.push2(cpu.pc)
 	cpu.push(cpu.getStatus() | 0x10)
 	cpu.status.Interrupt = true
-	cpu.pc = cpu.mem.Read16(NMIVector, cpu.cycle)
+	cpu.pc = cpu.mem.Read16(IRQVector, cpu.cycle)
 	return 0
 }
 
