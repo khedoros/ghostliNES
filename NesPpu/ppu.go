@@ -16,12 +16,14 @@ type NesPpu struct {
 	cyclesPerFrame    uint
 	linesPerFrame     uint
 	cyclesBeforeVSync uint
-	cpuPpuClockFactor uint
+	cpuPpuClockFactor float32
+	handledNmi        bool
 	cart              *nescart.NesCart
 	vram              [2048]uint8
 	sprRam            [256]uint8
 	palRam            [32]uint8
 	vramPtr           uint16
+	vramPtrShadow     uint16
 	vramLatch         bool
 	fineX             uint8
 	control1          ctrl1Reg // $2000 (W)
@@ -81,25 +83,41 @@ const (
 	ppuPalSize  = 0x20
 )
 
-func (this *NesPpu) New(mem *nescart.NesCart) {
+func (this *NesPpu) New(mem *nescart.NesCart, region string) {
 	this.cart = mem
-	this.cyclesPerFrame = cyclesPerFrameNtsc
-	this.cyclesBeforeVSync = cyclesBeforeVSyncNtsc
-	this.linesPerFrame = linesPerFrameNtsc
-	this.cpuPpuClockFactor = cpuClockDividerNtsc / ppuClockDividerNtsc
+	if region == "ntsc" {
+		this.cyclesPerFrame = cyclesPerFrameNtsc
+		this.cyclesBeforeVSync = cyclesBeforeVSyncNtsc
+		this.linesPerFrame = linesPerFrameNtsc
+		this.cpuPpuClockFactor = cpuClockDividerNtsc / ppuClockDividerNtsc
+	} else {
+		this.cyclesPerFrame = cyclesPerFramePal
+		this.cyclesBeforeVSync = cyclesBeforeVSyncPal
+		this.linesPerFrame = linesPerFramePal
+		this.cpuPpuClockFactor = cpuClockDividerPal / ppuClockDividerPal
+	}
 }
 
 func (this *NesPpu) IsNmi(cycles uint64) bool {
-	if (this.control1)&0x80 > 0 { // If NMI is enabled
-		cycles *= uint64(this.cpuPpuClockFactor)
+	if (this.control1)&0x80 > 0 && !this.handledNmi { // If NMI is enabled and haven't handled NMI yet
+		cycles = uint64(float32(cycles) * this.cpuPpuClockFactor)
 		cycles %= uint64(this.cyclesPerFrame)
-		return cycles > uint64(this.cyclesBeforeVSync)
+		if cycles > uint64(this.cyclesBeforeVSync) {
+			this.handledNmi = true
+			return true
+		}
 	}
 	return false
 }
 
-func (this *NesPpu) Run(cycles int64) int64 {
-	return 0
+func (this *NesPpu) Run(cycles int64) bool {
+	this.frameCycle += uint(this.cpuPpuClockFactor * float32(cycles))
+	if this.frameCycle >= this.cyclesPerFrame {
+		this.frameCycle -= this.cyclesPerFrame
+		this.handledNmi = false
+		return true
+	}
+	return false
 }
 
 // 0-1FFF: CRAM/CROM in cartridge
@@ -136,17 +154,29 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 		this.sprAddr = val
 	case ppuSprData:
 		this.sprData = val
-	case ppuVramAddr1:
+		this.sprRam[this.sprAddr] = val
+		this.sprAddr++
+	case ppuVramAddr1: // Scrolling register
 		if this.vramLatch {
 		} else {
 		}
-	case ppuVramAddr2:
-		if this.vramLatch {
+	case ppuVramAddr2: // VRAM access register
+		if this.vramLatch { // set lower 8 bits
+			this.vramPtrShadow &= 0xff00
+			this.vramPtrShadow |= uint16(val)
+			this.vramPtr = this.vramPtrShadow
 		} else {
+			this.vramPtrShadow &= 0x00ff
+			this.vramPtrShadow |= uint16(val&0b00111111) << 8
 		}
+		this.vramLatch = !this.vramLatch
 	case ppuVramData:
 		this.vram[this.vramPtr] = val
-	case ppuSprDma: // Probably actually do this via 256 writes
+		this.vramPtr++
+		this.vramPtr &= 0x3fff
+	case ppuSprDma: // Probably actually do this via 256 writes, so this access represents 1 write
+		this.sprRam[this.sprAddr] = val
+		this.sprAddr++
 	}
 
 }

@@ -103,7 +103,7 @@ func run() int {
 		renderer.Copy(texture, nil, nil)
 		renderer.Present()
 
-		sdl.Delay(16) //TODO: Better frame timing solution
+		//sdl.Delay(16) //TODO: Better frame timing solution
 	}
 
 	return 0

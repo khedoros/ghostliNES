@@ -63,6 +63,9 @@ func (cpu *CPU6502) Run(cycles int64) {
 		*/
 		cpu.pc += cpu_ops[op].OpSize
 		opCycles := cpu.ops[op]()
+		if opCycles == 0 {
+			panic(fmt.Sprintf("Zero-time operation found at pc %04x: %02x", cpu.pc, op))
+		}
 		cpu.frameCycle += opCycles
 		cpu.cycle += uint64(opCycles)
 
@@ -88,6 +91,7 @@ func (cpu *CPU6502) nmi() {
 	cpu.push2(cpu.pc)
 	cpu.push(cpu.getStatus())
 	cpu.status.Interrupt = true
+	//fmt.Printf("INTERRUPT: NMI from PC: %04x\n", cpu.pc)
 	cpu.pc = cpu.mem.Read16(NMIVector, cpu.cycle)
 }
 
@@ -96,6 +100,7 @@ func (cpu *CPU6502) irq() {
 	cpu.push(cpu.getStatus())
 	cpu.status.Interrupt = true
 	cpu.pc = cpu.mem.Read16(IRQVector, cpu.cycle)
+	//fmt.Printf("INTERRUPT: IRQ\n")
 }
 
 func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int64 {

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	//	"image/color"
 
@@ -37,6 +38,7 @@ type NesEmu struct {
 	resolution int
 	mapper     int
 	filename   string
+	region     string
 	mem        nesmem.NesMem
 	cpu        nescpu.CPU6502
 	ppu        nesppu.NesPpu
@@ -47,17 +49,24 @@ func (emu *NesEmu) New() error {
 	emu.debug = *flag.Bool("debug", false, "print debug output while running")
 	emu.resolution = *flag.Int("res", 1, "integer output scaling")
 	emu.mapper = *flag.Int("mapper", -1, "override detected iNES mapper number")
+	emu.region = *flag.String("region", "ntsc", "override detected ROM region (ntsc/pal)")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		fmt.Fprint(os.Stderr, "Not enough arguments. You need to at least specify a filename.\n")
 		flag.PrintDefaults()
+		return fmt.Errorf("Not enough arguments. You need to at least specify a filename.")
 	}
+	emu.region = strings.ToLower(emu.region)
+	if emu.region != "ntsc" && emu.region != "pal" {
+		return fmt.Errorf("Invalid region \"%s\" specified", emu.region)
+	}
+
 	emu.filename = flag.Arg(0)
 	fmt.Printf("Options\n--------\nDebug: %v\nResolution: %v\nMapper: %v\nFile: %v\n", emu.debug, emu.resolution, emu.mapper, emu.filename)
 
 	emu.mem.New(&emu.filename, emu.mapper, &emu.ppu, &emu.apu)
 	emu.cpu.New(&emu.mem)
-	emu.ppu.New(emu.mem.GetCart())
+	emu.ppu.New(emu.mem.GetCart(), emu.region)
 	emu.apu.New()
 
 	return nil
@@ -76,7 +85,10 @@ func (emu *NesEmu) RunFrame() {
 	opChunk := int64(10000)
 	emu.cpu.Run(opChunk)
 	//finish PPU render
-	emu.ppu.Run(opChunk)
+	frameDone := emu.ppu.Run(opChunk)
+	if frameDone {
+		//sdl.
+	}
 	//finish APU render
 
 }
