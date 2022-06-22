@@ -54,6 +54,9 @@ func run() int {
 	running := true
 	var event sdl.Event
 	var joysticks [16]*sdl.Joystick
+	renderWidth, renderHeight := nesemu.GetRenderSize()
+	frameBuffer, _ := sdl.CreateRGBSurface(0, renderWidth, renderHeight, 32, 0, 0, 0, 0)
+	texture, _ := renderer.CreateTextureFromSurface(frameBuffer)
 
 	for running {
 		for event = sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
@@ -97,9 +100,9 @@ func run() int {
 		}
 
 		emulator.RunFrame()
-		framebuffer := emulator.GetFrame()
-		texture, _ := renderer.CreateTextureFromSurface(framebuffer)
+		newFrame := emulator.GetFrame()
 		renderer.Clear()
+		texture.Update(nil, *newFrame, int(renderWidth)*4)
 		renderer.Copy(texture, nil, nil)
 		renderer.Present()
 

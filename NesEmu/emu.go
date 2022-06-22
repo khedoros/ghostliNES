@@ -37,7 +37,7 @@ type NesEmu struct {
 	mapper     int
 	filename   string
 	region     string
-	frame      *sdl.Surface
+	frame      []byte
 	mem        nesmem.NesMem
 	cpu        nescpu.CPU6502
 	ppu        nesppu.NesPpu
@@ -63,6 +63,7 @@ func (emu *NesEmu) New() error {
 	emu.filename = flag.Arg(0)
 	fmt.Printf("Options\n--------\nDebug: %v\nResolution: %v\nMapper: %v\nFile: %v\n", emu.debug, emu.resolution, emu.mapper, emu.filename)
 
+	emu.frame = make([]byte, renderWidth*renderHeight*4)
 	emu.mem.New(&emu.filename, emu.mapper, &emu.ppu, &emu.apu)
 	emu.cpu.New(&emu.mem)
 	emu.ppu.New(emu.mem.GetCart(), emu.region)
@@ -79,35 +80,30 @@ func (emu *NesEmu) InputEvent(event *sdl.Event) {
 	emu.mem.InputEvent(event)
 }
 
-func (emu *NesEmu) RunFrame() {
-	//run a frame of CPU
-	opChunk := int64(10000)
-	emu.cpu.Run(opChunk)
-	//finish PPU render
-	frameDone := emu.ppu.Run(opChunk)
-	if frameDone {
-		emu.GetFrame()
+func (emu *NesEmu) RunFrame() *[]byte {
+	frameDone := false
+	for !frameDone {
+		//run a chunk of CPU
+		opChunk := int64(10000)
+		emu.cpu.Run(opChunk)
+
+		//finish PPU render
+		frameDone = emu.ppu.Run(opChunk)
+		//finish APU render
 	}
-	//finish APU render
+	emu.GetFrame()
+	return &emu.frame
 
 }
 
-func (emu *NesEmu) GetFrame() *sdl.Surface {
-	if emu.frame == nil {
-		emu.frame, _ = sdl.CreateRGBSurface(0, renderWidth, renderHeight, 32, 0, 0, 0, 0)
-	}
+func (emu *NesEmu) GetFrame() *[]byte {
 	frame := emu.ppu.Render()
-	s := emu.frame.Pixels()
+	s := emu.frame
 	for i, v := range *frame {
 		s[i*4] = v.R
 		s[i*4+1] = v.G
 		s[i*4+2] = v.B
 		s[i*4+3] = 255
 	}
-	for y := 0; y < renderHeight; y++ {
-		for x := 0; x < renderWidth; x++ {
-			//s.Set(x,y,color.RGBA{uint8(x),uint8(y),255,255})
-		}
-	}
-	return emu.frame
+	return &emu.frame
 }
