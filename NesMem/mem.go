@@ -26,7 +26,7 @@ func (this *NesMem) New(filename *string, mapper int, ppu *nesppu.NesPpu, apu *n
 	this.ppu = ppu
 	this.apu = apu
 	fmt.Println("Loading file ", *filename)
-	valid := this.cart.Load(filename)
+	valid := this.cart.Load(filename, mapper)
 	if !valid {
 		fmt.Println("File failed to load")
 	} else {

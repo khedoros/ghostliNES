@@ -108,6 +108,7 @@ const (
 
 func (cart *NesCart) getMapper() mappers.Mapper {
 	var mapper mappers.Mapper = nil
+    fmt.Printf("%d: ", cart.header.MapperNum)
 	switch cart.header.MapperNum {
 	case NROM:
 		mapper = &mappers.NromMapper{}
@@ -171,7 +172,7 @@ const (
 )
 
 //Load reads the provided ROM file, and puts it into an NesCart struct for access by the emulator
-func (cart *NesCart) Load(filename *string) bool {
+func (cart *NesCart) Load(filename *string, mapperNum int) bool {
 	var contents []byte
 	var err error
 	if strings.HasSuffix(*filename, ".zip") {
@@ -215,7 +216,11 @@ func (cart *NesCart) Load(filename *string) bool {
 		}
 		cart.chrROM = contents
 	}
-	cart.header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
+    if mapperNum == -1 {
+	    cart.header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
+    } else {
+        cart.header.MapperNum = MapperType(mapperNum)
+    }
 	cart.header.Mirroring = MirrorType(header[6] & 1)
 	cart.header.Battery = (header[6] & 2) == 2
 	cart.header.Trainer = (header[6] & 4) == 4

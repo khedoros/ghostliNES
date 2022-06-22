@@ -45,10 +45,10 @@ type NesEmu struct {
 }
 
 func (emu *NesEmu) New() error {
-	emu.debug = *flag.Bool("debug", false, "print debug output while running")
-	emu.resolution = *flag.Int("res", 1, "integer output scaling")
-	emu.mapper = *flag.Int("mapper", -1, "override detected iNES mapper number")
-	emu.region = *flag.String("region", "ntsc", "override detected ROM region (ntsc/pal)")
+	flag.BoolVar(&emu.debug, "debug", false, "print debug output while running")
+	flag.IntVar(&emu.resolution, "res", 1, "integer output scaling")
+	flag.IntVar(&emu.mapper, "mapper", -1, "override detected iNES mapper number")
+	flag.StringVar(&emu.region, "region", "ntsc", "override detected ROM region (ntsc/pal)")
 	flag.Parse()
 	if flag.NArg() < 1 {
 		fmt.Fprint(os.Stderr, "Not enough arguments. You need to at least specify a filename.\n")
