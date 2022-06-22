@@ -171,8 +171,12 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 		}
 		this.vramLatch = !this.vramLatch
 	case ppuVramData:
-		this.vram[this.vramPtr] = val
-		this.vramPtr++
+		this.write(this.vramPtr, val, cycle)
+		if this.control1&4 == 4 {
+			this.vramPtr += 32
+		} else {
+			this.vramPtr++
+		}
 		this.vramPtr &= 0x3fff
 	case ppuSprDma: // Probably actually do this via 256 writes, so this access represents 1 write
 		this.sprRam[this.sprAddr] = val
@@ -190,4 +194,29 @@ func (this *NesPpu) read(addr uint16, cycle uint64) uint8 {
 }
 
 // Internal PPU memory write
-func (this *NesPpu) write(addr uint16, cycle uint64) {}
+func (this *NesPpu) write(addr uint16, val uint8, cycle uint64) {
+	if addr < 0x2000 { // Write to CRAM/CROM
+		this.cart.WritePpu(addr, val, cycle)
+	} else if addr < 0x4000 { // Write to VRAM
+		// TODO: Mirroring. For now, keep the writes within physical VRAM
+		addr %= 0x800
+		this.vram[addr] = val
+	}
+}
+
+type Color struct {
+	R, G, B uint8
+}
+
+func (this *NesPpu) Render() *[]Color {
+	c := []Color{}
+	for i := 0; i < 256*240; i++ {
+		if i%256 < 32 && i/256 < 30 {
+			val := this.vram[(i/256)*32+i%256]
+			c = append(c, Color{val, val, val})
+		} else {
+			c = append(c, Color{0, 0, 0})
+		}
+	}
+	return &c
+}

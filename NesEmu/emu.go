@@ -6,8 +6,6 @@ import (
 	"os"
 	"strings"
 
-	//	"image/color"
-
 	nesapu "github.com/khedoros/ghostliNES/NesApu"
 	nescpu "github.com/khedoros/ghostliNES/NesCpu"
 	nesmem "github.com/khedoros/ghostliNES/NesMem"
@@ -39,6 +37,7 @@ type NesEmu struct {
 	mapper     int
 	filename   string
 	region     string
+	frame      *sdl.Surface
 	mem        nesmem.NesMem
 	cpu        nescpu.CPU6502
 	ppu        nesppu.NesPpu
@@ -87,18 +86,28 @@ func (emu *NesEmu) RunFrame() {
 	//finish PPU render
 	frameDone := emu.ppu.Run(opChunk)
 	if frameDone {
-		//sdl.
+		emu.GetFrame()
 	}
 	//finish APU render
 
 }
 
 func (emu *NesEmu) GetFrame() *sdl.Surface {
-	s, _ := sdl.CreateRGBSurface(0, renderWidth, renderHeight, 32, 0, 0, 0, 0)
+	if emu.frame == nil {
+		emu.frame, _ = sdl.CreateRGBSurface(0, renderWidth, renderHeight, 32, 0, 0, 0, 0)
+	}
+	frame := emu.ppu.Render()
+	s := emu.frame.Pixels()
+	for i, v := range *frame {
+		s[i*4] = v.R
+		s[i*4+1] = v.G
+		s[i*4+2] = v.B
+		s[i*4+3] = 255
+	}
 	for y := 0; y < renderHeight; y++ {
 		for x := 0; x < renderWidth; x++ {
 			//s.Set(x,y,color.RGBA{uint8(x),uint8(y),255,255})
 		}
 	}
-	return s
+	return emu.frame
 }
