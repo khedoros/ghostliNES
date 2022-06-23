@@ -18,10 +18,12 @@ type NesPpu struct {
 	cyclesBeforeVSync uint
 	cpuPpuClockFactor float32
 	handledNmi        bool
+	clearedStatus     bool
 	cart              *nescart.NesCart
 	vram              [2048]uint8
 	sprRam            [256]uint8
 	palRam            [32]uint8
+	palette           [64]Color
 	vramPtr           uint16
 	vramPtrShadow     uint16
 	vramLatch         bool
@@ -81,6 +83,8 @@ const (
 	ppuVramSize = 0x1000
 	ppuPalBase  = 0x3f00
 	ppuPalSize  = 0x20
+
+	bitFlip16 = uint16(65535)
 )
 
 func (this *NesPpu) New(mem *nescart.NesCart, region string) {
@@ -95,6 +99,24 @@ func (this *NesPpu) New(mem *nescart.NesCart, region string) {
 		this.cyclesBeforeVSync = cyclesBeforeVSyncPal
 		this.linesPerFrame = linesPerFramePal
 		this.cpuPpuClockFactor = cpuClockDividerPal / ppuClockDividerPal
+	}
+	this.palette = [64]Color{
+		{0x6a, 0x6d, 0x6a}, {0x00, 0x13, 0x80}, {0x1e, 0x00, 0x8a}, {0x39, 0x00, 0x7a},
+		{0x55, 0x00, 0x56}, {0x5a, 0x00, 0x18}, {0x4f, 0x10, 0x00}, {0x3d, 0x1c, 0x00},
+		{0x25, 0x32, 0x00}, {0x00, 0x3d, 0x00}, {0x00, 0x40, 0x00}, {0x00, 0x39, 0x24},
+		{0x00, 0x2e, 0x55}, {0x00, 0x00, 0x00}, {0x00, 0x00, 0x00}, {0x00, 0x00, 0x00},
+		{0xb9, 0xbc, 0xb9}, {0x18, 0x50, 0xc7}, {0x4b, 0x30, 0xe3}, {0x73, 0x22, 0xd6},
+		{0x95, 0x1f, 0xa9}, {0x9d, 0x28, 0x5c}, {0x98, 0x37, 0x00}, {0x7f, 0x4c, 0x00},
+		{0x5e, 0x64, 0x00}, {0x22, 0x77, 0x00}, {0x02, 0x7e, 0x02}, {0x00, 0x76, 0x45},
+		{0x00, 0x6e, 0x8a}, {0x00, 0x00, 0x00}, {0x00, 0x00, 0x00}, {0x00, 0x00, 0x00},
+		{0xff, 0xff, 0xff}, {0x68, 0xa6, 0xff}, {0x8c, 0x9c, 0xff}, {0xb5, 0x86, 0xff},
+		{0xd9, 0x75, 0xfd}, {0xe3, 0x77, 0xb9}, {0xe5, 0x8d, 0x68}, {0xd4, 0x9d, 0x29},
+		{0xb3, 0xaf, 0x0c}, {0x7b, 0xc2, 0x11}, {0x55, 0xca, 0x47}, {0x46, 0xcb, 0x81},
+		{0x47, 0xc1, 0xc5}, {0x4a, 0x4d, 0x4a}, {0x00, 0x00, 0x00}, {0x00, 0x00, 0x00},
+		{0xff, 0xff, 0xff}, {0xcc, 0xea, 0xff}, {0xdd, 0xde, 0xff}, {0xec, 0xda, 0xff},
+		{0xf8, 0xd7, 0xfe}, {0xfc, 0xd6, 0xf5}, {0xfd, 0xdb, 0xcf}, {0xf9, 0xe7, 0xb5},
+		{0xf1, 0xf0, 0xaa}, {0xda, 0xfa, 0xa9}, {0xc9, 0xff, 0xbc}, {0xc3, 0xfb, 0xd7},
+		{0xc4, 0xf6, 0xf6}, {0xbe, 0xc1, 0xbe}, {0x00, 0x00, 0x00}, {0x00, 0x00, 0x00},
 	}
 }
 
@@ -115,6 +137,7 @@ func (this *NesPpu) Run(cycles int64) bool {
 	if this.frameCycle >= this.cyclesPerFrame {
 		this.frameCycle -= this.cyclesPerFrame
 		this.handledNmi = false
+		this.clearedStatus = false
 		return true
 	}
 	return false
@@ -129,15 +152,36 @@ func (this *NesPpu) Run(cycles int64) bool {
 
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
-	fmt.Printf("Read PPU %04x\n", addr)
+	frameCycle := uint64(float64(this.cpuPpuClockFactor)*float64(cycle)) % uint64(this.cyclesPerFrame)
+	fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
+
 	switch addr {
 	case ppuStatus:
-		return 0x80
+		status := uint8(0x0)
+		if frameCycle > uint64(20*cyclesPerLine) { // TODO: actually calculate Sprite0 collision, rather than just setting it at the beginning of line 20
+			status |= 0x40
+		}
+		if frameCycle > uint64(this.cyclesBeforeVSync) && !this.clearedStatus {
+			status |= 0x80
+			this.clearedStatus = true
+		}
+		this.vramLatch = false
+		fmt.Printf(", returning %02x\n", status)
+		return status
 	case ppuSprData:
+		fmt.Printf(", returning %02x\n", 0)
 		return 0
 	case ppuVramData:
-		return 0
+		val := this.read(this.vramPtr, cycle)
+		fmt.Printf(", returning %02x\n", val)
+		if this.control1&4 == 4 {
+			this.vramPtr += 32
+		} else {
+			this.vramPtr++
+		}
+		return val
 	default:
+		fmt.Printf(", returning %02x\n", 0)
 		return 0
 	}
 }
@@ -148,6 +192,13 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 	switch addr {
 	case ppuControl1:
 		this.control1 = ctrl1Reg(val)
+
+		// Put bits 0+1 into bits 10+11 of the vramPtrShadow
+		clearBits := bitFlip16 ^ (uint16(3 << 10))
+		setBits := (uint16(val & 3)) << 10
+		this.vramPtrShadow &= clearBits
+		this.vramPtrShadow |= setBits
+
 	case ppuControl2:
 		this.control2 = ctrl2Reg(val)
 	case ppuSprAddr:
@@ -157,13 +208,24 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 		this.sprRam[this.sprAddr] = val
 		this.sprAddr++
 	case ppuVramAddr1: // Scrolling register
-		if this.vramLatch {
-		} else {
+		if this.vramLatch { // Set y scroll
+			clearBits := bitFlip16 ^ (0b111001111100000)
+			fineY := uint16(val&0b111) << 12
+			coarseY := uint16(val&0b11111000) << 2
+			this.vramPtrShadow &= clearBits
+			this.vramPtrShadow |= (fineY | coarseY)
+		} else { // set x scroll
+			clearBits := bitFlip16 ^ (0b11111)
+			coarseX := (uint16(val & 0b11111000)) >> 3
+			this.vramPtrShadow &= clearBits
+			this.vramPtrShadow |= coarseX
+			this.fineX = val & 0b111
 		}
+		this.vramLatch = !this.vramLatch
 	case ppuVramAddr2: // VRAM access register
 		if this.vramLatch { // set lower 8 bits
 			this.vramPtrShadow &= 0xff00
-			this.vramPtrShadow |= uint16(val)
+			this.vramPtrShadow |= uint16(0b00111111 & val)
 			this.vramPtr = this.vramPtrShadow
 		} else {
 			this.vramPtrShadow &= 0x00ff
@@ -195,12 +257,13 @@ func (this *NesPpu) read(addr uint16, cycle uint64) uint8 {
 
 // Internal PPU memory write
 func (this *NesPpu) write(addr uint16, val uint8, cycle uint64) {
-	if addr < 0x2000 { // Write to CRAM/CROM
+	if addr < ppuVramBase { // Write to CRAM/CROM
 		this.cart.WritePpu(addr, val, cycle)
+	} else if addr >= 0x3f00 && addr < 0x4000 { // Write to palette RAM
+		this.palRam[addr&0x1f] = val
 	} else if addr < 0x4000 { // Write to VRAM
-		// TODO: Mirroring. For now, keep the writes within physical VRAM
-		addr %= 0x800
-		this.vram[addr] = val
+		// TODO: Mirroring. For now, just keep the writes within physical VRAM
+		this.vram[addr&0x7ff] = val
 	}
 }
 
