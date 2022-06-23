@@ -209,7 +209,7 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 		this.sprAddr++
 	case ppuVramAddr1: // Scrolling register
 		if this.vramLatch { // Set y scroll
-			clearBits := bitFlip16 ^ (0b111001111100000)
+			clearBits := bitFlip16 ^ (0b1111001111100000)
 			fineY := uint16(val&0b111) << 12
 			coarseY := uint16(val&0b11111000) << 2
 			this.vramPtrShadow &= clearBits
@@ -225,11 +225,11 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 	case ppuVramAddr2: // VRAM access register
 		if this.vramLatch { // set lower 8 bits
 			this.vramPtrShadow &= 0xff00
-			this.vramPtrShadow |= uint16(0b00111111 & val)
+			this.vramPtrShadow |= uint16(val)
 			this.vramPtr = this.vramPtrShadow
 		} else {
 			this.vramPtrShadow &= 0x00ff
-			this.vramPtrShadow |= uint16(val&0b00111111) << 8
+			this.vramPtrShadow |= (uint16(val&0b00111111) << 8)
 		}
 		this.vramLatch = !this.vramLatch
 	case ppuVramData:
@@ -271,14 +271,43 @@ type Color struct {
 	R, G, B uint8
 }
 
+func (this *NesPpu) getTileLine(base uint16, tileNum, fineY uint8) [8]Color {
+	line := [8]Color{}
+	addr := base + uint16(tileNum)*16 + uint16(fineY)
+	dat1 := this.cart.ReadPpu(addr, 0)
+	dat2 := this.cart.ReadPpu(addr+8, 0)
+	mask := uint8(128)
+	for pix := 0; pix < 8; pix++ {
+		bit1 := (dat1 & mask) >> (7 - pix)
+		bit2 := (dat2 & mask) >> (7 - pix)
+		idx := bit1 | (bit2 << 1)
+		line[pix] = this.palette[this.palRam[idx]]
+		mask /= 2
+	}
+	return line
+}
+
 func (this *NesPpu) Render() *[]Color {
 	c := []Color{}
-	for i := 0; i < 256*240; i++ {
-		if i%256 < 32 && i/256 < 30 {
-			val := this.vram[(i/256)*32+i%256]
-			c = append(c, Color{val, val, val})
-		} else {
-			c = append(c, Color{0, 0, 0})
+	for coarseY := uint(0); coarseY < 30; coarseY++ {
+		for fineY := uint8(0); fineY < 8; fineY++ {
+			for coarseX := uint(0); coarseX < 32; coarseX++ {
+				/*
+					tileNum := coarseY*32 + coarseX
+					base := uint16(0)
+					tileNum %= 512
+					if tileNum > 255 {
+						base = 0x1000
+						tileNum -= 256
+					}
+					tileLine := this.getTileLine(base, uint8(tileNum), fineY)
+				*/
+				tileNum := this.vram[coarseY*32+coarseX]
+				tileLine := this.getTileLine(0x1000, tileNum, fineY)
+				for fineX := 0; fineX < 8; fineX++ {
+					c = append(c, tileLine[fineX])
+				}
+			}
 		}
 	}
 	return &c
