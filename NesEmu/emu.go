@@ -100,9 +100,9 @@ func (emu *NesEmu) GetFrame() *[]byte {
 	frame := emu.ppu.Render()
 	s := emu.frame
 	for i, v := range *frame {
-		s[i*4] = v.R
+		s[i*4+2] = v.R
 		s[i*4+1] = v.G
-		s[i*4+2] = v.B
+		s[i*4] = v.B
 		s[i*4+3] = 255
 	}
 	return &emu.frame

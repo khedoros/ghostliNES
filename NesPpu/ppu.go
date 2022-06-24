@@ -251,8 +251,9 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 func (this *NesPpu) read(addr uint16, cycle uint64) uint8 {
 	if addr < 0x2000 {
 		return this.cart.ReadPpu(addr, cycle)
+	} else {
+		return this.vram[addr&0x7ff]
 	}
-	return 0
 }
 
 // Internal PPU memory write
@@ -271,8 +272,8 @@ type Color struct {
 	R, G, B uint8
 }
 
-func (this *NesPpu) getTileLine(base uint16, tileNum, fineY uint8) [8]Color {
-	line := [8]Color{}
+func (this *NesPpu) getTileLine(base uint16, tileNum, fineY uint8) [8]uint8 {
+	line := [8]uint8{}
 	addr := base + uint16(tileNum)*16 + uint16(fineY)
 	dat1 := this.cart.ReadPpu(addr, 0)
 	dat2 := this.cart.ReadPpu(addr+8, 0)
@@ -281,10 +282,17 @@ func (this *NesPpu) getTileLine(base uint16, tileNum, fineY uint8) [8]Color {
 		bit1 := (dat1 & mask) >> (7 - pix)
 		bit2 := (dat2 & mask) >> (7 - pix)
 		idx := bit1 | (bit2 << 1)
-		line[pix] = this.palette[this.palRam[idx]]
+		line[pix] = idx
 		mask /= 2
 	}
 	return line
+}
+
+func (this *NesPpu) getAttrib(base uint16, coarseX, coarseY uint8) uint8 {
+	addr := base + 0x3c0 + uint16(coarseX)/4 + ((uint16(coarseY) / 4) * 8)
+	attribByte := this.read(addr, 0)
+	shift := 2 * ((coarseX%4)/2 + 2*((coarseY%4)/2))
+	return (attribByte & (3 << shift)) >> shift
 }
 
 func (this *NesPpu) Render() *[]Color {
@@ -292,23 +300,20 @@ func (this *NesPpu) Render() *[]Color {
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
 		for fineY := uint8(0); fineY < 8; fineY++ {
 			for coarseX := uint(0); coarseX < 32; coarseX++ {
-				/*
-					tileNum := coarseY*32 + coarseX
-					base := uint16(0)
-					tileNum %= 512
-					if tileNum > 255 {
-						base = 0x1000
-						tileNum -= 256
-					}
-					tileLine := this.getTileLine(base, uint8(tileNum), fineY)
-				*/
 				tileNum := this.vram[coarseY*32+coarseX]
 				tileLine := this.getTileLine(0x1000, tileNum, fineY)
+				tileAttrib := this.getAttrib(0x2000, uint8(coarseX), uint8(coarseY)) << 2
 				for fineX := 0; fineX < 8; fineX++ {
-					c = append(c, tileLine[fineX])
+					c = append(c, this.palette[this.palRam[tileAttrib|tileLine[fineX]]])
 				}
 			}
 		}
+	}
+	for spr := 63; spr <= 0; spr-- {
+		if this.sprRam[spr*4] > 0xef { // Sprite isn't visible
+			continue
+		}
+
 	}
 	return &c
 }

@@ -63,7 +63,12 @@ func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 		//fmt.Printf("write %02x to %04x\n", val, addr)
 		this.ram[addr&0x7ff] = val
 	} else if addr < 0x4000 {
-		this.ppu.Write(addr, val, cycle)
+		this.ppu.Write((addr%8 + 0x2000), val, cycle)
+	} else if addr == 0x4014 { // Sprite DMA
+		base := uint16(val) * 0x100
+		for i := uint16(0); i < 256; i++ {
+			this.ppu.Write(0x4014, this.Read(base+i, cycle+uint64(i)*2), cycle+uint64(i)*2)
+		}
 	} else if addr < 0x4020 {
 		fmt.Printf("write addr: %x val: %x: I/O and APU space\n", addr, val)
 	} else {

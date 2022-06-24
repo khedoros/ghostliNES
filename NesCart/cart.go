@@ -108,7 +108,7 @@ const (
 
 func (cart *NesCart) getMapper() mappers.Mapper {
 	var mapper mappers.Mapper = nil
-    fmt.Printf("%d: ", cart.header.MapperNum)
+	fmt.Printf("%d: ", cart.header.MapperNum)
 	switch cart.header.MapperNum {
 	case NROM:
 		mapper = &mappers.NromMapper{}
@@ -216,11 +216,11 @@ func (cart *NesCart) Load(filename *string, mapperNum int) bool {
 		}
 		cart.chrROM = contents
 	}
-    if mapperNum == -1 {
-	    cart.header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
-    } else {
-        cart.header.MapperNum = MapperType(mapperNum)
-    }
+	if mapperNum == -1 {
+		cart.header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
+	} else {
+		cart.header.MapperNum = MapperType(mapperNum)
+	}
 	cart.header.Mirroring = MirrorType(header[6] & 1)
 	cart.header.Battery = (header[6] & 2) == 2
 	cart.header.Trainer = (header[6] & 4) == 4
@@ -239,17 +239,34 @@ func (cart *NesCart) Load(filename *string, mapperNum int) bool {
 	}
 	cart.mapper.New(uint(len(cart.prgROM)), uint(len(cart.chrROM)))
 
+	if cart.header.Battery {
+		cart.sRAM = make([]uint8, 0x2000)
+	}
+
 	return true
 }
 
 //Read reads a byte from the given address in the cartridge address-space
 func (cart *NesCart) Read(addr uint16, cycle uint64) uint8 {
+	if addr >= 0x6000 && addr < 0x8000 {
+		if cart.sRAM == nil {
+			cart.sRAM = make([]uint8, 0x2000)
+		}
+		return cart.sRAM[addr-0x6000]
+	}
 	return cart.prgROM[cart.mapper.MapCpu(addr, cycle)]
 }
 
 //Write handles bytes written onto the cartridge bus by the CPU
 func (cart *NesCart) Write(addr uint16, val uint8, cycle uint64) {
-	cart.mapper.WriteCpu(addr, val, cycle)
+	if addr >= 0x6000 && addr < 0x8000 {
+		if cart.sRAM == nil {
+			cart.sRAM = make([]uint8, 0x2000)
+		}
+		cart.sRAM[addr-0x6000] = val
+	} else {
+		cart.mapper.WriteCpu(addr, val, cycle)
+	}
 }
 
 //ReadPpu reads a byte from the given address in the cartridge address-space
