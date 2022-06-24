@@ -15,9 +15,11 @@ type NesMem struct {
 	ppu       *nesppu.NesPpu
 	apu       *nesapu.NesApu
 	ram       [0x800]uint8
-	joy       [8]bool
+	joy1      [8]bool
+	joy2      [8]bool
 	joyStrobe bool
-	joyIndex  int
+	joy1Index int
+	joy2Index int
 }
 
 const (
@@ -37,21 +39,29 @@ func (this *NesMem) InputEvent(event *sdl.Event) {
 		pressed := t.State == sdl.PRESSED
 		switch t.Keysym.Sym {
 		case sdl.K_a:
-			this.joy[LEFT] = pressed
+			this.joy1[LEFT] = pressed
+			this.joy2[LEFT] = pressed
 		case sdl.K_s:
-			this.joy[DOWN] = pressed
+			this.joy1[DOWN] = pressed
+			this.joy2[DOWN] = pressed
 		case sdl.K_d:
-			this.joy[RIGHT] = pressed
+			this.joy1[RIGHT] = pressed
+			this.joy2[RIGHT] = pressed
 		case sdl.K_w:
-			this.joy[UP] = pressed
+			this.joy1[UP] = pressed
+			this.joy2[UP] = pressed
 		case sdl.K_g:
-			this.joy[SELECT] = pressed
+			this.joy1[SELECT] = pressed
+			this.joy2[SELECT] = pressed
 		case sdl.K_h:
-			this.joy[START] = pressed
+			this.joy1[START] = pressed
+			this.joy2[START] = pressed
 		case sdl.K_k:
-			this.joy[KEYB] = pressed
+			this.joy1[KEYB] = pressed
+			this.joy2[KEYB] = pressed
 		case sdl.K_l:
-			this.joy[KEYA] = pressed
+			this.joy1[KEYA] = pressed
+			this.joy2[KEYA] = pressed
 		}
 	}
 }
@@ -81,14 +91,25 @@ func (this *NesMem) Read(addr uint16, cycle uint64) uint8 {
 		return this.ppu.Read(addr, cycle)
 	} else if addr < 0x4020 {
 		if addr == 0x4016 { // Joy1
-			if this.joyIndex >= 8 {
+			if this.joy1Index >= 8 {
 				return 0
 			} else {
 				val := uint8(0)
-				if this.joy[this.joyIndex] {
+				if this.joy1[this.joy1Index] {
 					val = 1
 				}
-				this.joyIndex++
+				this.joy1Index++
+				return val
+			}
+		} else if addr == 0x4017 { // Joy2
+			if this.joy2Index >= 8 {
+				return 0
+			} else {
+				val := uint8(0)
+				if this.joy2[this.joy2Index] {
+					val = 1
+				}
+				this.joy2Index++
 				return val
 			}
 		}
@@ -121,7 +142,8 @@ func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 			this.joyStrobe = true
 		} else if val&0x01 == 0 && this.joyStrobe {
 			this.joyStrobe = false
-			this.joyIndex = 0
+			this.joy1Index = 0
+			this.joy2Index = 0
 		}
 	} else if addr < 0x4020 {
 		fmt.Printf("write addr: %x val: %x: I/O and APU space\n", addr, val)

@@ -12,6 +12,7 @@ type statReg uint8
 
 //An NesPpu represents an NES's Picture Processing Unit
 type NesPpu struct {
+	buffer            [256 * 240]Color
 	frameCycle        uint
 	cyclesPerFrame    uint
 	linesPerFrame     uint
@@ -265,11 +266,11 @@ func (this *NesPpu) write(addr uint16, val uint8, cycle uint64) {
 	addr &= 0x3fff
 	if addr < ppuVramBase { // Write to CRAM/CROM
 		this.cart.WritePpu(addr, val, cycle)
-	} else if addr >= 0x3f00 && addr < 0x4000 { // Write to palette RAM
+	} else if addr >= 0x3f00 { // Write to palette RAM
 		addr &= 0x1f
 		element := addr % 4
+		this.palRam[addr] = val
 		if element == 0 {
-			this.palRam[addr] = val
 			this.palRam[addr^0x10] = val
 		}
 	} else { // Write to name/attrib table
@@ -305,8 +306,8 @@ func (this *NesPpu) getAttrib(base uint16, coarseX, coarseY uint8) uint8 {
 	return (attribByte & (3 << shift)) >> shift
 }
 
-func (this *NesPpu) Render() *[]Color {
-	c := []Color{}
+func (this *NesPpu) Render() *[61440]Color {
+	pix := 0
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
 		for fineY := uint8(0); fineY < 8; fineY++ {
 			for coarseX := uint(0); coarseX < 32; coarseX++ {
@@ -314,7 +315,8 @@ func (this *NesPpu) Render() *[]Color {
 				tileLine := this.getTileLine(0x1000, tileNum, fineY)
 				tileAttrib := this.getAttrib(0x2000, uint8(coarseX), uint8(coarseY)) << 2
 				for fineX := 0; fineX < 8; fineX++ {
-					c = append(c, this.palette[this.palRam[tileAttrib|tileLine[fineX]]])
+					this.buffer[pix] = this.palette[this.palRam[tileAttrib|tileLine[fineX]]]
+					pix++
 				}
 			}
 		}
@@ -323,7 +325,7 @@ func (this *NesPpu) Render() *[]Color {
 		if this.sprRam[spr*4] >= 0xef { // Sprite isn't visible
 			continue
 		} else {
-			fmt.Printf("Render Sprite %02x\n", spr)
+			//fmt.Printf("Render Sprite %02x\n", spr)
 		}
 		y := this.sprRam[spr*4] + 1
 		t := this.sprRam[spr*4+1]
@@ -353,26 +355,26 @@ func (this *NesPpu) Render() *[]Color {
 				}
 				if tileLine[xPix] != 0 {
 					col := this.palette[this.palRam[0x10+pal|tileLine[xPix]]]
-					c[uint(x+xFine)+uint(y+line)*256] = col
+					this.buffer[uint(x+xFine)+uint(y+line)*256] = col
 				}
 			}
 		}
 		if height == 16 {
-			for line := uint8(0); line < 8 && line+y < 240; line++ {
+			for line := uint8(0); line < 8 && line+y+8 < 240; line++ {
 				tileLine := this.getTileLine(offset, t+1, line)
-				for xFine := uint8(0); xFine < 8 && uint(xFine)+uint(x) < 256; xFine++ {
+				for xFine := uint8(0); xFine < 8; xFine++ {
 					xPix := xFine
 					if xf {
 						xPix = 7 - xFine
 					}
-					if tileLine[xPix] != 0 {
+					if tileLine[xPix] != 0 && uint(xPix)+uint(x) < 256 {
 						col := this.palette[this.palRam[0x10+pal|tileLine[xPix]]]
-						c[uint(x+xFine)+uint(y+line+8)*256] = col
+						this.buffer[uint(x+xFine)+uint(y+line+8)*256] = col
 					}
 				}
 			}
 		}
 
 	}
-	return &c
+	return &this.buffer
 }
