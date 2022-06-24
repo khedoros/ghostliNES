@@ -286,6 +286,9 @@ type Color struct {
 func (this *NesPpu) getTileLine(base uint16, tileNum, fineY uint8) [8]uint8 {
 	line := [8]uint8{}
 	addr := base + uint16(tileNum)*16 + uint16(fineY)
+	if fineY >= 8 {
+		addr += 8
+	}
 	dat1 := this.cart.ReadPpu(addr, 0)
 	dat2 := this.cart.ReadPpu(addr+8, 0)
 	mask := uint8(128)
@@ -308,14 +311,16 @@ func (this *NesPpu) getAttrib(base uint16, coarseX, coarseY uint8) uint8 {
 
 func (this *NesPpu) Render() *[61440]Color {
 	pix := 0
+	base := 256 * uint16(this.control1&0x10)
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
 		for fineY := uint8(0); fineY < 8; fineY++ {
 			for coarseX := uint(0); coarseX < 32; coarseX++ {
 				tileNum := this.vram[coarseY*32+coarseX]
-				tileLine := this.getTileLine(0x1000, tileNum, fineY)
+				tileLine := this.getTileLine(base, tileNum, fineY)
 				tileAttrib := this.getAttrib(0x2000, uint8(coarseX), uint8(coarseY)) << 2
+
 				for fineX := 0; fineX < 8; fineX++ {
-					this.buffer[pix] = this.palette[this.palRam[tileAttrib|tileLine[fineX]]]
+					this.buffer[pix] = this.palette[this.palRam[tileAttrib|tileLine[fineX]]&0x1f]
 					pix++
 				}
 			}
@@ -332,10 +337,10 @@ func (this *NesPpu) Render() *[61440]Color {
 		s := this.sprRam[spr*4+2]
 		x := this.sprRam[spr*4+3]
 		pal := (s & 3) << 2
-		//yf := (s & 0x80) == 0x80
+		yf := (s & 0x80) == 0x80
 		xf := (s & 0x40) == 0x40
 		//p := (s & 0x20) == 0x20
-		height := 8
+		height := uint8(8)
 		offset := uint16(this.control1&0x08) * 512
 		if this.control1&0x20 == 0x20 { // tall sprites
 			height = 16
@@ -345,9 +350,15 @@ func (this *NesPpu) Render() *[61440]Color {
 				offset = 0
 			}
 			t &= 0xfe
+
 		}
-		for line := uint8(0); line < 8 && line+y < 240; line++ {
-			tileLine := this.getTileLine(offset, t, line)
+		for line := uint8(0); line < height && line+y < 240; line++ {
+			yPix := line
+			if yf {
+				yPix = height - line - 1
+			}
+
+			tileLine := this.getTileLine(offset, t, yPix)
 			for xFine := uint8(0); xFine < 8 && uint(xFine)+uint(x) < 256; xFine++ {
 				xPix := xFine
 				if xf {
@@ -359,22 +370,6 @@ func (this *NesPpu) Render() *[61440]Color {
 				}
 			}
 		}
-		if height == 16 {
-			for line := uint8(0); line < 8 && line+y+8 < 240; line++ {
-				tileLine := this.getTileLine(offset, t+1, line)
-				for xFine := uint8(0); xFine < 8; xFine++ {
-					xPix := xFine
-					if xf {
-						xPix = 7 - xFine
-					}
-					if tileLine[xPix] != 0 && uint(xPix)+uint(x) < 256 {
-						col := this.palette[this.palRam[0x10+pal|tileLine[xPix]]]
-						this.buffer[uint(x+xFine)+uint(y+line+8)*256] = col
-					}
-				}
-			}
-		}
-
 	}
 	return &this.buffer
 }
