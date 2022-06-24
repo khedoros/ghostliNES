@@ -18,3 +18,7 @@ func (m *Rambo1Mapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
 func (m *Rambo1Mapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
 }
+
+func (m *Rambo1Mapper) GetMirror() MirrorType {
+	return HARDWIRED
+}

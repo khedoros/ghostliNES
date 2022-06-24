@@ -3,6 +3,8 @@ package mappers
 type CnromMapper struct {
 	prgROM uint
 	chrROM uint
+
+	chrPage uint
 }
 
 func (m CnromMapper) MapCpu(addr uint16, cycle uint64) uint {
@@ -13,8 +15,17 @@ func (m CnromMapper) MapPpu(addr uint16, cycle uint64) uint {
 	return uint(addr)
 }
 
-func (m CnromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
+func (m CnromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
+	if addr > 0x8000 {
+		m.chrPage = uint(val)
+	}
+}
 
 func (m *CnromMapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
+	m.chrPage = 0
+}
+
+func (m *CnromMapper) GetMirror() MirrorType {
+	return HARDWIRED
 }

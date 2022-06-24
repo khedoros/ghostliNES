@@ -18,3 +18,7 @@ func (m *ColorDreamsMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
 func (m *ColorDreamsMapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
 }
+
+func (m *ColorDreamsMapper) GetMirror() MirrorType {
+	return HARDWIRED
+}

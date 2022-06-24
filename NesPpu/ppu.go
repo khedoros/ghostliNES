@@ -188,7 +188,7 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 
 // CPU interface to write to externally-accessible registers
 func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
-	fmt.Printf("Write PPU %04x = %02x\n", addr, val)
+	//fmt.Printf("Write PPU %04x = %02x\n", addr, val)
 	switch addr {
 	case ppuControl1:
 		this.control1 = ctrl1Reg(val)
@@ -241,6 +241,7 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 		}
 		this.vramPtr &= 0x3fff
 	case ppuSprDma: // Probably actually do this via 256 writes, so this access represents 1 write
+		//fmt.Printf("DMA[%02x] = %02x\n", this.sprAddr, val)
 		this.sprRam[this.sprAddr] = val
 		this.sprAddr++
 	}
@@ -249,20 +250,29 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 
 // Internal PPU memory read
 func (this *NesPpu) read(addr uint16, cycle uint64) uint8 {
-	if addr < 0x2000 {
+	addr &= 0x3fff
+	if addr < 0x2000 { // Read from pattern table
 		return this.cart.ReadPpu(addr, cycle)
-	} else {
+	} else if addr >= 0x3f00 && addr < 0x4000 { // Read from palette RAM
+		return 0
+	} else { // Read from name/attrib table
 		return this.vram[addr&0x7ff]
 	}
 }
 
 // Internal PPU memory write
 func (this *NesPpu) write(addr uint16, val uint8, cycle uint64) {
+	addr &= 0x3fff
 	if addr < ppuVramBase { // Write to CRAM/CROM
 		this.cart.WritePpu(addr, val, cycle)
 	} else if addr >= 0x3f00 && addr < 0x4000 { // Write to palette RAM
-		this.palRam[addr&0x1f] = val
-	} else if addr < 0x4000 { // Write to VRAM
+		addr &= 0x1f
+		element := addr % 4
+		if element == 0 {
+			this.palRam[addr] = val
+			this.palRam[addr^0x10] = val
+		}
+	} else { // Write to name/attrib table
 		// TODO: Mirroring. For now, just keep the writes within physical VRAM
 		this.vram[addr&0x7ff] = val
 	}
@@ -309,9 +319,58 @@ func (this *NesPpu) Render() *[]Color {
 			}
 		}
 	}
-	for spr := 63; spr <= 0; spr-- {
-		if this.sprRam[spr*4] > 0xef { // Sprite isn't visible
+	for spr := 63; spr >= 0; spr-- {
+		if this.sprRam[spr*4] >= 0xef { // Sprite isn't visible
 			continue
+		} else {
+			fmt.Printf("Render Sprite %02x\n", spr)
+		}
+		y := this.sprRam[spr*4] + 1
+		t := this.sprRam[spr*4+1]
+		s := this.sprRam[spr*4+2]
+		x := this.sprRam[spr*4+3]
+		pal := (s & 3) << 2
+		//yf := (s & 0x80) == 0x80
+		xf := (s & 0x40) == 0x40
+		//p := (s & 0x20) == 0x20
+		height := 8
+		offset := uint16(this.control1&0x08) * 512
+		if this.control1&0x20 == 0x20 { // tall sprites
+			height = 16
+			if t&1 == 1 {
+				offset = 0x1000
+			} else {
+				offset = 0
+			}
+			t &= 0xfe
+		}
+		for line := uint8(0); line < 8 && line+y < 240; line++ {
+			tileLine := this.getTileLine(offset, t, line)
+			for xFine := uint8(0); xFine < 8 && uint(xFine)+uint(x) < 256; xFine++ {
+				xPix := xFine
+				if xf {
+					xPix = 7 - xFine
+				}
+				if tileLine[xPix] != 0 {
+					col := this.palette[this.palRam[0x10+pal|tileLine[xPix]]]
+					c[uint(x+xFine)+uint(y+line)*256] = col
+				}
+			}
+		}
+		if height == 16 {
+			for line := uint8(0); line < 8 && line+y < 240; line++ {
+				tileLine := this.getTileLine(offset, t+1, line)
+				for xFine := uint8(0); xFine < 8 && uint(xFine)+uint(x) < 256; xFine++ {
+					xPix := xFine
+					if xf {
+						xPix = 7 - xFine
+					}
+					if tileLine[xPix] != 0 {
+						col := this.palette[this.palRam[0x10+pal|tileLine[xPix]]]
+						c[uint(x+xFine)+uint(y+line+8)*256] = col
+					}
+				}
+			}
 		}
 
 	}

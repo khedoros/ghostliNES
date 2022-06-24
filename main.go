@@ -38,7 +38,7 @@ func run() int {
 		sdl.WINDOWPOS_UNDEFINED,
 		sdl.WINDOWPOS_UNDEFINED,
 		winWidth, winHeight,
-		sdl.WINDOW_SHOWN); createWinErr != nil {
+		sdl.WINDOW_SHOWN|sdl.WINDOW_RESIZABLE); createWinErr != nil {
 		fmt.Fprintf(os.Stderr, "Failed to create window: %s\n", createWinErr)
 		return 2
 	}
@@ -67,6 +67,9 @@ func run() int {
 				fmt.Printf("[%d ms] Keyboard\ttype:%d\tsym:%d\tmodifiers:%d\tstate:%d\trepeat:%d\n",
 					t.Timestamp, t.Type, t.Keysym.Sym, t.Keysym.Mod, t.State, t.Repeat)
 				emulator.InputEvent(&event)
+				if t.Keysym.Sym == sdl.K_q {
+					running = false
+				}
 			case *sdl.JoyAxisEvent:
 				fmt.Printf("[%d ms] JoyAxis\ttype:%d\twhich:%c\taxis:%d\tvalue:%d\n",
 					t.Timestamp, t.Type, t.Which, t.Axis, t.Value)
@@ -106,7 +109,7 @@ func run() int {
 		renderer.Copy(texture, nil, nil)
 		renderer.Present()
 
-		//sdl.Delay(16) //TODO: Better frame timing solution
+		sdl.Delay(16) //TODO: Better frame timing solution
 	}
 
 	return 0

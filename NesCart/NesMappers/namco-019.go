@@ -18,3 +18,7 @@ func (m *NamcoMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
 func (m *NamcoMapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
 }
+
+func (m *NamcoMapper) GetMirror() MirrorType {
+	return HARDWIRED
+}

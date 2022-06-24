@@ -18,3 +18,7 @@ func (m *Mmc2Mapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
 func (m *Mmc2Mapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
 }
+
+func (m *Mmc2Mapper) GetMirror() MirrorType {
+	return HARDWIRED
+}

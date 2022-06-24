@@ -107,3 +107,13 @@ func (m *Mmc1Mapper) New(prg, chr uint) {
 	m.chrLoPage = 0
 	m.chrHiPage = 1
 }
+
+func (m *Mmc1Mapper) GetMirror() MirrorType {
+	if !m.normalMirror {
+		return SINGLESCREEN
+	} else if m.mirror {
+		return VMIRROR
+	} else {
+		return HMIRROR
+	}
+}

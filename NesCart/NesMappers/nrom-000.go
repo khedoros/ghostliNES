@@ -18,3 +18,7 @@ func (m NromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {}
 func (m *NromMapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
 }
+
+func (m *NromMapper) GetMirror() MirrorType {
+	return HARDWIRED
+}

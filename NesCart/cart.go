@@ -25,20 +25,19 @@ func Equal(a, b []byte) bool {
 
 //NesHeader defines the 16-byte structure that makes up the iNES header in most NES ROMs
 type NesHeader struct {
-	PrgSize      int        //byte 4, 16KB units
-	ChrSize      int        //byte 5, 8KB units
-	ChrRAM       bool       //byte 5 == 0
-	MapperNum    MapperType //high-4 of byte 6 (low)  and high-4 of byte 7 (high)
-	Mirroring    MirrorType //byte 6 bit 0 (0 == H-Mirror, 1 == V-Mirror)
-	Battery      bool       //byte 6 bit 1
-	Trainer      bool       //byte 6 bit 2
-	FourScreen   bool       //byte 6 bit 3 (0 == no extra RAM, 1 == extra RAM?)
-	SysType      SysType    //byte 7 bits 0,1
-	PrgRAM       bool       //byte 10 bit 4
-	PrgRAMSize   int        //byte 8, 8KB units
-	TvType       TvType     //byte 9 bit 0, byte 10 bits 0+1
-	Nes2_0       bool       //byte 7 bits 2,3 == 0x02
-	BusConflicts bool       //byte 10 bit 5
+	PrgSize      int                //byte 4, 16KB units
+	ChrSize      int                //byte 5, 8KB units
+	ChrRAM       bool               //byte 5 == 0
+	MapperNum    MapperType         //high-4 of byte 6 (low)  and high-4 of byte 7 (high)
+	Mirroring    mappers.MirrorType //byte 6 bit 0 (0 == H-Mirror, 1 == V-Mirror), 4-screen in byte 6, bit 3
+	Battery      bool               //byte 6 bit 1
+	Trainer      bool               //byte 6 bit 2
+	SysType      SysType            //byte 7 bits 0,1
+	PrgRAM       bool               //byte 10 bit 4
+	PrgRAMSize   int                //byte 8, 8KB units
+	TvType       TvType             //byte 9 bit 0, byte 10 bits 0+1
+	Nes2_0       bool               //byte 7 bits 2,3 == 0x02
+	BusConflicts bool               //byte 10 bit 5
 }
 
 //if byte7 AND 0x0C == 0x08, and ROM size, taking into account byte 9 doesn't exceed actual filesize, then NES2.0
@@ -53,15 +52,6 @@ type NesCart struct {
 	mapper mappers.Mapper
 	header NesHeader
 }
-
-//MirrorType is the type of graphics memory mirroring that the cartridge is currently configured to use
-type MirrorType int
-
-//These specify how the cartridge is wired to mirror addresses in the name table
-const (
-	HMIRROR MirrorType = iota
-	VMIRROR
-)
 
 //MapperType is an enum of constants giving the mapper numbers symbolic names.
 type MapperType int
@@ -221,10 +211,12 @@ func (cart *NesCart) Load(filename *string, mapperNum int) bool {
 	} else {
 		cart.header.MapperNum = MapperType(mapperNum)
 	}
-	cart.header.Mirroring = MirrorType(header[6] & 1)
+	cart.header.Mirroring = mappers.MirrorType(header[6] & 1)
 	cart.header.Battery = (header[6] & 2) == 2
 	cart.header.Trainer = (header[6] & 4) == 4
-	cart.header.FourScreen = (header[6] & 8) == 8
+	if (header[6] & 8) == 8 {
+		cart.header.Mirroring = mappers.FOURSCREEN
+	}
 
 	// Info beyond this point is "iffy"
 	cart.header.SysType = SysType(header[7] & 3)
@@ -279,4 +271,12 @@ func (cart *NesCart) WritePpu(addr uint16, val uint8, cycle uint64) {
 	if cart.header.ChrRAM {
 		cart.chrROM[cart.mapper.MapPpu(addr, cycle)] = val
 	}
+}
+
+func (cart NesCart) GetMirror() mappers.MirrorType {
+	mapperMirror := cart.mapper.GetMirror()
+	if mapperMirror == mappers.HARDWIRED {
+		return cart.header.Mirroring
+	}
+	return mapperMirror
 }
