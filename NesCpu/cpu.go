@@ -22,8 +22,8 @@ type CPU6502 struct {
 	pc                      uint16
 	areg, xreg, yreg, spreg byte
 	mem                     *nesmem.NesMem
-	ops                     [256]func() int64
-	frameCycle              int64
+	ops                     [256]func() uint
+	frameCycle              uint
 	cycle                   uint64
 	zeroFlagNote            byte
 	negFlagNote             byte
@@ -44,7 +44,7 @@ func (cpu *CPU6502) New(m *nesmem.NesMem) {
 	fmt.Printf("Read address %04x and got vector %04x\n", RSTVector, cpu.pc)
 }
 
-func (cpu *CPU6502) Run(cycles int64) {
+func (cpu *CPU6502) Run(cycles uint) {
 	for cpu.frameCycle < cycles {
 		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.cycle))
 		/*
@@ -73,18 +73,19 @@ func (cpu *CPU6502) Run(cycles int64) {
 			cpu.nmi()
 		}
 	}
+
 	cpu.frameCycle -= cycles
 }
 
 type CPU6502instr struct {
 	OpSize      uint16
-	OpTime      int64
-	OpExtraTime int64
-	OpFunc      func(*CPU6502, uint16) int64
+	OpTime      uint
+	OpExtraTime uint
+	OpFunc      func(*CPU6502, uint16) uint
 	AddrFunc    func(*CPU6502) uint16
 }
 
-type opFunc func(*CPU6502, uint16) int64
+type opFunc func(*CPU6502, uint16) uint
 type addrFunc func(*CPU6502) uint16
 
 func (cpu *CPU6502) nmi() {
@@ -103,8 +104,8 @@ func (cpu *CPU6502) irq() {
 	//fmt.Printf("INTERRUPT: IRQ\n")
 }
 
-func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() int64 {
-	return func() int64 { return cpu_ops[code].OpTime + o(cpu, a(cpu)) }
+func (cpu *CPU6502) opc(code byte, a addrFunc, o opFunc) func() uint {
+	return func() uint { return cpu_ops[code].OpTime + o(cpu, a(cpu)) }
 }
 
 func (cpu *CPU6502) push2(val uint16) {

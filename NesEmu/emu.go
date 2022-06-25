@@ -84,10 +84,12 @@ func (emu *NesEmu) RunFrame() *[]byte {
 	frameDone := false
 	for !frameDone {
 		//run a chunk of CPU
-		opChunk := int64(10000)
+		// fmt.Println("Run CPU")
+		opChunk := uint(10000)
 		emu.cpu.Run(opChunk)
 
 		//finish PPU render
+		// fmt.Println("Run PPU")
 		frameDone = emu.ppu.Run(opChunk)
 		//finish APU render
 	}

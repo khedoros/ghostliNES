@@ -8,6 +8,12 @@ type ctrl1Reg uint8
 type ctrl2Reg uint8
 type statReg uint8
 
+type ppuWrite struct {
+	addr  uint16
+	val   uint8
+	cycle uint
+}
+
 //An NesPpu represents an NES's Picture Processing Unit
 type NesPpu struct {
 	buffer            [256 * 240]Color
@@ -15,27 +21,32 @@ type NesPpu struct {
 	cyclesPerFrame    uint
 	linesPerFrame     uint
 	cyclesBeforeVSync uint
-	cpuPpuClockFactor float32
+	cpuPpuClockFactor float64
 	handledNmi        bool
 	clearedStatus     bool
-	cart              *nescart.NesCart
-	vram              [2048]uint8
-	sprRam            [256]uint8
-	palRam            [32]uint8
-	palette           [64]Color
-	vramPtr           uint16
-	vramPtrShadow     uint16
-	vramLatch         bool
-	fineX             uint8
-	control1          ctrl1Reg // $2000 (W)
-	control2          ctrl2Reg // $2001 (W)
-	status            statReg  // $2002 (R)
-	sprAddr           uint8    // $2003 (W)
-	sprData           uint8    // $2004 (RW)
-	vramAddr1         uint8    // $2005 (W)
-	vramAddr2         uint8    // $2006 (W)
-	vramData          uint8    // $2007 (RW)
-	sprDMA            uint8    // $4014 (W)
+
+	writeQueue     [3000]ppuWrite
+	writeQueueCnt  uint
+	processedUntil uint
+
+	cart          *nescart.NesCart
+	vram          [2048]uint8
+	sprRam        [256]uint8
+	palRam        [32]uint8
+	palette       [64]Color
+	vramPtr       uint16
+	vramPtrShadow uint16
+	vramLatch     bool
+	fineX         uint8
+	control1      ctrl1Reg // $2000 (W)
+	control2      ctrl2Reg // $2001 (W)
+	status        statReg  // $2002 (R)
+	sprAddr       uint8    // $2003 (W)
+	//sprData       uint8    // $2004 (RW)
+	vramAddr1 uint8 // $2005 (W)
+	vramAddr2 uint8 // $2006 (W)
+	vramData  uint8 // $2007 (RW)
+	sprDMA    uint8 // $4014 (W)
 }
 
 const (
@@ -121,9 +132,8 @@ func (this *NesPpu) New(mem *nescart.NesCart, region string) {
 
 func (this *NesPpu) IsNmi(cycles uint64) bool {
 	if (this.control1)&0x80 > 0 && !this.handledNmi { // If NMI is enabled and haven't handled NMI yet
-		cycles = uint64(float32(cycles) * this.cpuPpuClockFactor)
-		cycles %= uint64(this.cyclesPerFrame)
-		if cycles > uint64(this.cyclesBeforeVSync) {
+		cycle := this.cpuToPpuCycle(cycles)
+		if cycle > this.cyclesBeforeVSync {
 			this.handledNmi = true
 			return true
 		}
@@ -131,8 +141,8 @@ func (this *NesPpu) IsNmi(cycles uint64) bool {
 	return false
 }
 
-func (this *NesPpu) Run(cycles int64) bool {
-	this.frameCycle += uint(this.cpuPpuClockFactor * float32(cycles))
+func (this *NesPpu) Run(cycles uint) bool {
+	this.frameCycle += this.cpuToPpuCycle(uint64(cycles))
 	if this.frameCycle >= this.cyclesPerFrame {
 		this.frameCycle -= this.cyclesPerFrame
 		this.handledNmi = false
@@ -152,7 +162,7 @@ func (this *NesPpu) Run(cycles int64) bool {
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	frameCycle := uint64(float64(this.cpuPpuClockFactor)*float64(cycle)) % uint64(this.cyclesPerFrame)
-	//fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
+	// fmt.Printf("Read PPU %04x at frame cycle %d\n", addr, frameCycle)
 
 	switch addr {
 	case ppuStatus:
@@ -173,11 +183,7 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	case ppuVramData:
 		val := this.read(this.vramPtr, cycle)
 		//fmt.Printf(", returning %02x\n", val)
-		if this.control1&4 == 4 {
-			this.vramPtr += 32
-		} else {
-			this.vramPtr++
-		}
+		this.vramPtr++
 		return val
 	default:
 		//fmt.Printf(", returning %02x\n", 0)
@@ -185,66 +191,87 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	}
 }
 
+func (this *NesPpu) cpuToPpuCycle(cycle uint64) uint {
+	cycles := uint64(float64(cycle) * this.cpuPpuClockFactor)
+	return uint(cycles % uint64(this.cyclesPerFrame))
+}
+
 // CPU interface to write to externally-accessible registers
 func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
-	//fmt.Printf("Write PPU %04x = %02x\n", addr, val)
-	switch addr {
-	case ppuControl1:
-		this.control1 = ctrl1Reg(val)
+	// fmt.Printf("Write PPU %04x = %02x (write queue %d)\n", addr, val, this.writeQueueCnt)
+	this.writeQueue[this.writeQueueCnt] = ppuWrite{addr, val, this.cpuToPpuCycle(cycle)}
+	this.writeQueueCnt++
+}
 
-		// Put bits 0+1 into bits 10+11 of the vramPtrShadow
-		clearBits := bitFlip16 ^ (uint16(3 << 10))
-		setBits := (uint16(val & 3)) << 10
-		this.vramPtrShadow &= clearBits
-		this.vramPtrShadow |= setBits
+func (this *NesPpu) apply(upToCycle uint) {
+	item := this.processedUntil
+	for ; item < this.writeQueueCnt && this.writeQueue[item].cycle <= upToCycle; item++ {
+		curItem := this.writeQueue[item]
+		addr := curItem.addr
+		val := curItem.val
+		cycle := curItem.cycle
 
-	case ppuControl2:
-		this.control2 = ctrl2Reg(val)
-	case ppuSprAddr:
-		this.sprAddr = val
-	case ppuSprData:
-		this.sprData = val
-		this.sprRam[this.sprAddr] = val
-		this.sprAddr++
-	case ppuVramAddr1: // Scrolling register
-		if this.vramLatch { // Set y scroll
-			clearBits := bitFlip16 ^ (0b1111001111100000)
-			fineY := uint16(val&0b111) << 12
-			coarseY := uint16(val&0b11111000) << 2
+		switch addr {
+		case ppuControl1:
+			this.control1 = ctrl1Reg(val)
+			// Put bits 0+1 into bits 10+11 of the vramPtrShadow
+			clearBits := bitFlip16 ^ (uint16(3 << 10))
+			setBits := (uint16(val & 3)) << 10
 			this.vramPtrShadow &= clearBits
-			this.vramPtrShadow |= (fineY | coarseY)
-		} else { // set x scroll
-			clearBits := bitFlip16 ^ (0b11111)
-			coarseX := (uint16(val & 0b11111000)) >> 3
-			this.vramPtrShadow &= clearBits
-			this.vramPtrShadow |= coarseX
-			this.fineX = val & 0b111
+			this.vramPtrShadow |= setBits
+		case ppuControl2:
+			this.control2 = ctrl2Reg(val)
+		case ppuSprAddr:
+			this.sprAddr = val
+		case ppuSprData:
+			this.sprRam[this.sprAddr] = val
+			this.sprAddr++
+		case ppuVramAddr1: // Scrolling register
+			if this.vramLatch { // Set y scroll
+				clearBits := bitFlip16 ^ (0b1111001111100000)
+				fineY := uint16(val&0b111) << 12
+				coarseY := uint16(val&0b11111000) << 2
+				this.vramPtrShadow &= clearBits
+				this.vramPtrShadow |= (fineY | coarseY)
+			} else { // set x scroll
+				clearBits := bitFlip16 ^ (0b11111)
+				coarseX := (uint16(val & 0b11111000)) >> 3
+				this.vramPtrShadow &= clearBits
+				this.vramPtrShadow |= coarseX
+				this.fineX = val & 0b111
+			}
+			this.vramLatch = !this.vramLatch
+		case ppuVramAddr2: // VRAM access register
+			if this.vramLatch { // set lower 8 bits
+				this.vramPtrShadow &= 0xff00
+				this.vramPtrShadow |= uint16(val)
+				this.vramPtr = this.vramPtrShadow
+			} else {
+				this.vramPtrShadow &= 0x00ff
+				this.vramPtrShadow |= (uint16(val&0b00111111) << 8)
+			}
+			this.vramLatch = !this.vramLatch
+		case ppuVramData:
+			this.write(this.vramPtr, val, uint64(cycle))
+			if this.control1&4 == 4 {
+				this.vramPtr += 32
+			} else {
+				this.vramPtr++
+			}
+			this.vramPtr &= 0x3fff
+		case ppuSprDma: // Probably actually do this via 256 writes, so this access represents 1 write
+			//fmt.Printf("DMA[%02x] = %02x\n", this.sprAddr, val)
+			this.sprRam[this.sprAddr] = val
+			this.sprAddr++
 		}
-		this.vramLatch = !this.vramLatch
-	case ppuVramAddr2: // VRAM access register
-		if this.vramLatch { // set lower 8 bits
-			this.vramPtrShadow &= 0xff00
-			this.vramPtrShadow |= uint16(val)
-			this.vramPtr = this.vramPtrShadow
-		} else {
-			this.vramPtrShadow &= 0x00ff
-			this.vramPtrShadow |= (uint16(val&0b00111111) << 8)
-		}
-		this.vramLatch = !this.vramLatch
-	case ppuVramData:
-		this.write(this.vramPtr, val, cycle)
-		if this.control1&4 == 4 {
-			this.vramPtr += 32
-		} else {
-			this.vramPtr++
-		}
-		this.vramPtr &= 0x3fff
-	case ppuSprDma: // Probably actually do this via 256 writes, so this access represents 1 write
-		//fmt.Printf("DMA[%02x] = %02x\n", this.sprAddr, val)
-		this.sprRam[this.sprAddr] = val
-		this.sprAddr++
 	}
 
+	if item == this.writeQueueCnt {
+		this.processedUntil = 0
+		this.writeQueueCnt = 0
+	} else {
+		this.processedUntil = item
+	}
 }
 
 // Internal PPU memory read
@@ -265,6 +292,7 @@ func (this *NesPpu) write(addr uint16, val uint8, cycle uint64) {
 	if addr < ppuVramBase { // Write to CRAM/CROM
 		this.cart.WritePpu(addr, val, cycle)
 	} else if addr >= 0x3f00 { // Write to palette RAM
+		val &= 0x3f
 		addr &= 0x1f
 		element := addr % 4
 		this.palRam[addr] = val
@@ -308,17 +336,18 @@ func (this *NesPpu) getAttrib(base uint16, coarseX, coarseY uint8) uint8 {
 }
 
 func (this *NesPpu) Render() *[61440]Color {
+	this.apply(this.cyclesPerFrame)
 	pix := 0
-	base := 256 * uint16(this.control1&0x10)
+	bgBase := 256 * uint16(this.control1&0x10)
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
 		for fineY := uint8(0); fineY < 8; fineY++ {
 			for coarseX := uint(0); coarseX < 32; coarseX++ {
 				tileNum := this.vram[coarseY*32+coarseX]
-				tileLine := this.getTileLine(base, tileNum, fineY)
+				tileLine := this.getTileLine(bgBase, tileNum, fineY)
 				tileAttrib := this.getAttrib(0x2000, uint8(coarseX), uint8(coarseY)) << 2
 
 				for fineX := 0; fineX < 8; fineX++ {
-					this.buffer[pix] = this.palette[this.palRam[tileAttrib|tileLine[fineX]]&0x1f]
+					this.buffer[pix] = this.palette[this.palRam[tileAttrib|tileLine[fineX]]]
 					pix++
 				}
 			}
@@ -339,16 +368,15 @@ func (this *NesPpu) Render() *[61440]Color {
 		xf := (s & 0x40) == 0x40
 		//p := (s & 0x20) == 0x20
 		height := uint8(8)
-		offset := uint16(this.control1&0x08) * 512
+		sprBase := uint16(this.control1&0x08) * 512
 		if this.control1&0x20 == 0x20 { // tall sprites
 			height = 16
 			if t&1 == 1 {
-				offset = 0x1000
+				sprBase = 0x1000
 			} else {
-				offset = 0
+				sprBase = 0
 			}
 			t &= 0xfe
-
 		}
 		for line := uint8(0); line < height && line+y < 240; line++ {
 			yPix := line
@@ -356,14 +384,14 @@ func (this *NesPpu) Render() *[61440]Color {
 				yPix = height - line - 1
 			}
 
-			tileLine := this.getTileLine(offset, t, yPix)
+			tileLine := this.getTileLine(sprBase, t, yPix)
 			for xFine := uint8(0); xFine < 8 && uint(xFine)+uint(x) < 256; xFine++ {
 				xPix := xFine
 				if xf {
 					xPix = 7 - xFine
 				}
 				if tileLine[xPix] != 0 {
-					col := this.palette[this.palRam[0x10+pal|tileLine[xPix]]]
+					col := this.palette[this.palRam[(0x10+pal|tileLine[xPix])]]
 					this.buffer[uint(x+xFine)+uint(y+line)*256] = col
 				}
 			}

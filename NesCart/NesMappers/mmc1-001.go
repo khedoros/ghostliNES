@@ -31,7 +31,7 @@ func (m Mmc1Mapper) MapCpu(addr uint16, cycle uint64) uint {
 }
 
 func (m Mmc1Mapper) MapPpu(addr uint16, cycle uint64) uint {
-	if addr <= 0x1000 {
+	if addr < 0x1000 {
 		return m.chrLoPage*4096 + uint(addr)
 	} else {
 		return m.chrHiPage*4096 + uint(addr&0xfff)
