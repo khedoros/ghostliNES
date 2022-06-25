@@ -36,14 +36,17 @@ func (m Mmc3Mapper) MapCpu(addr uint16, cycle uint64) uint {
 }
 
 func (m Mmc3Mapper) MapPpu(addr uint16, cycle uint64) uint {
-	return m.chrPages[addr>>10]*0x400 + uint(addr&0x3ff) ^ m.chrAddrXor
+	//fmt.Printf("MMC3: addr %04x goes to page %x, currently set to %02x\n", addr, addr>>10, m.chrPages[addr>>10])
+	return m.chrPages[addr>>10]*0x400 + uint(addr&0x3ff)
+
 }
 
 func (m *Mmc3Mapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
+	//fmt.Printf("MMC3: %04x = %02x\n", addr, val)
 	addr &= 0xe001
 	switch addr {
 	case 0x8000: // ctrl1 register
-		m.chrAddrXor = 32 * uint(val&0x80)
+		m.chrAddrXor = uint((val & 0x80) / 0x20) // 0 or 4
 		m.prgLowIsFixed = val&0x40 == 0x40
 		m.ctrlCmd = val & 0x7
 
@@ -60,19 +63,19 @@ func (m *Mmc3Mapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
 	case 0x8001: // bank for ctrl1
 		switch m.ctrlCmd {
 		case 0:
-			m.chrPages[0] = uint(val)
-			m.chrPages[1] = uint(val + 1)
+			m.chrPages[0^m.chrAddrXor] = uint(val)
+			m.chrPages[1^m.chrAddrXor] = uint(val + 1)
 		case 1:
-			m.chrPages[2] = uint(val)
-			m.chrPages[3] = uint(val + 1)
+			m.chrPages[2^m.chrAddrXor] = uint(val)
+			m.chrPages[3^m.chrAddrXor] = uint(val + 1)
 		case 2:
-			m.chrPages[4] = uint(val)
+			m.chrPages[4^m.chrAddrXor] = uint(val)
 		case 3:
-			m.chrPages[5] = uint(val)
+			m.chrPages[5^m.chrAddrXor] = uint(val)
 		case 4:
-			m.chrPages[6] = uint(val)
+			m.chrPages[6^m.chrAddrXor] = uint(val)
 		case 5:
-			m.chrPages[7] = uint(val)
+			m.chrPages[7^m.chrAddrXor] = uint(val)
 		case 6:
 			if m.prgLowIsFixed {
 				m.hiPrgPage = uint(val)
@@ -104,7 +107,7 @@ func (m *Mmc3Mapper) New(prg, chr uint) {
 	m.prgLowIsFixed = false
 	m.sRamEnable = false
 	m.sRamReadOnly = true
-	m.chrPages = [8]uint{0, 1, 2, 3, 4, 5, 6, 7}
+	m.chrPages = [8]uint{1, 1, 1, 1, 1, 1, 1, 1}
 }
 
 func (m *Mmc3Mapper) GetMirror() MirrorType {

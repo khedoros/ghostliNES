@@ -1,7 +1,5 @@
 package mappers
 
-import "fmt"
-
 type Mmc1Mapper struct {
 	prgROM    uint
 	chrROM    uint
@@ -39,7 +37,7 @@ func (m Mmc1Mapper) MapPpu(addr uint16, cycle uint64) uint {
 }
 
 func (m *Mmc1Mapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
-	fmt.Printf("MMC1 %04x = %02x\n", addr, val)
+	//fmt.Printf("MMC1 %04x = %02x\n", addr, val)
 	if (val & 0x80) == 0x80 {
 		m.buffer = 0
 		m.bitCount = 0
@@ -62,7 +60,7 @@ func (m *Mmc1Mapper) apply(addr uint16, cycle uint64) {
 		m.swapPromLo = ((m.buffer & 4) == 4)
 		m.smallPrgSwap = ((m.buffer & 8) == 8)
 		m.smallChrSwap = ((m.buffer & 16) == 16)
-		fmt.Printf("MMC1 Reg0: %02x\n", m.buffer)
+		//fmt.Printf("MMC1 Reg0: %02x\n", m.buffer)
 	} else if addr >= 0xa000 && addr <= 0xbfff { // Reg1: RxxPCCCC
 		if m.smallChrSwap {
 			m.chrLoPage = uint(m.buffer & 0xf)
@@ -70,12 +68,12 @@ func (m *Mmc1Mapper) apply(addr uint16, cycle uint64) {
 			m.chrLoPage = uint((m.buffer & 0xe) >> 1) // TODO: Verify that this *is* actually supposed to ignore the low bit in this case
 			m.chrHiPage = m.chrLoPage + 1
 		}
-		fmt.Printf("MMC1 Reg1: %02x\n", m.buffer)
+		//fmt.Printf("MMC1 Reg1: %02x\n", m.buffer)
 	} else if addr >= 0xc000 && addr <= 0xdfff { // Reg2: RxxPCCCC
 		if m.smallChrSwap {
 			m.chrHiPage = uint(m.buffer & 0x0f)
 		}
-		fmt.Printf("MMC1 Reg2: %02x\n", m.buffer)
+		//fmt.Printf("MMC1 Reg2: %02x\n", m.buffer)
 	} else if addr >= 0xe000 && addr <= 0xffff { // Reg3: RxxPCCCC
 		if m.smallPrgSwap && m.swapPromLo { // Swap region at 0x8000
 			m.prgLoPage = uint(m.buffer & 0xf)
@@ -88,7 +86,7 @@ func (m *Mmc1Mapper) apply(addr uint16, cycle uint64) {
 
 		m.sramDisabled = (m.buffer & 0x10) == 0x10
 
-		fmt.Printf("MMC1 Reg3: %02x\n", m.buffer)
+		//fmt.Printf("MMC1 Reg3: %02x\n", m.buffer)
 	}
 }
 
