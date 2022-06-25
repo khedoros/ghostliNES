@@ -1,8 +1,6 @@
 package nesppu
 
 import (
-	"fmt"
-
 	nescart "github.com/khedoros/ghostliNES/NesCart"
 )
 
@@ -154,7 +152,7 @@ func (this *NesPpu) Run(cycles int64) bool {
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	frameCycle := uint64(float64(this.cpuPpuClockFactor)*float64(cycle)) % uint64(this.cyclesPerFrame)
-	fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
+	//fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
 
 	switch addr {
 	case ppuStatus:
@@ -167,14 +165,14 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 			this.clearedStatus = true
 		}
 		this.vramLatch = false
-		fmt.Printf(", returning %02x\n", status)
+		//fmt.Printf(", returning %02x\n", status)
 		return status
 	case ppuSprData:
-		fmt.Printf(", returning %02x\n", 0)
+		//fmt.Printf(", returning %02x\n", 0)
 		return 0
 	case ppuVramData:
 		val := this.read(this.vramPtr, cycle)
-		fmt.Printf(", returning %02x\n", val)
+		//fmt.Printf(", returning %02x\n", val)
 		if this.control1&4 == 4 {
 			this.vramPtr += 32
 		} else {
@@ -182,7 +180,7 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 		}
 		return val
 	default:
-		fmt.Printf(", returning %02x\n", 0)
+		//fmt.Printf(", returning %02x\n", 0)
 		return 0
 	}
 }
