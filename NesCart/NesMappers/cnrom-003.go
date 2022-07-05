@@ -12,7 +12,7 @@ func (m CnromMapper) MapCpu(addr uint16, cycle uint64) uint {
 }
 
 func (m CnromMapper) MapPpu(addr uint16, cycle uint64) uint {
-	return uint(addr)
+	return uint(addr) + m.chrPage * 8192
 }
 
 func (m CnromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
@@ -23,7 +23,8 @@ func (m CnromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
 
 func (m *CnromMapper) New(prg, chr uint) {
 	m.prgROM, m.chrROM = prg, chr
-	m.chrPage = 0
+    pages := chr / 8192
+	m.chrPage = pages - 1
 }
 
 func (m *CnromMapper) GetMirror() MirrorType {

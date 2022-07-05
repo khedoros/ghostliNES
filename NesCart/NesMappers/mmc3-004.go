@@ -107,7 +107,7 @@ func (m *Mmc3Mapper) New(prg, chr uint) {
 	m.prgLowIsFixed = false
 	m.sRamEnable = false
 	m.sRamReadOnly = true
-	m.chrPages = [8]uint{1, 1, 1, 1, 1, 1, 1, 1}
+	m.chrPages = [8]uint{0, 1, 2, 3, 4, 5, 6, 7}
 }
 
 func (m *Mmc3Mapper) GetMirror() MirrorType {

@@ -1,6 +1,8 @@
 package nesppu
 
 import (
+	"fmt"
+
 	nescart "github.com/khedoros/ghostliNES/NesCart"
 )
 
@@ -143,6 +145,7 @@ func (this *NesPpu) IsNmi(cycles uint64) bool {
 
 func (this *NesPpu) Run(cycles uint) bool {
 	this.frameCycle += this.cpuToPpuCycle(uint64(cycles))
+	this.apply(this.frameCycle)
 	if this.frameCycle >= this.cyclesPerFrame {
 		this.frameCycle -= this.cyclesPerFrame
 		this.handledNmi = false
@@ -162,7 +165,9 @@ func (this *NesPpu) Run(cycles uint) bool {
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	frameCycle := uint64(float64(this.cpuPpuClockFactor)*float64(cycle)) % uint64(this.cyclesPerFrame)
-	// fmt.Printf("Read PPU %04x at frame cycle %d\n", addr, frameCycle)
+	if addr != 0x2002 {
+		fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
+	}
 
 	switch addr {
 	case ppuStatus:
@@ -182,11 +187,11 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 		return 0
 	case ppuVramData:
 		val := this.read(this.vramPtr, cycle)
-		//fmt.Printf(", returning %02x\n", val)
+		fmt.Printf(", returning %02x\n", val)
 		this.vramPtr++
 		return val
 	default:
-		//fmt.Printf(", returning %02x\n", 0)
+		fmt.Printf(", returning %02x\n", 0)
 		return 0
 	}
 }
@@ -198,18 +203,22 @@ func (this *NesPpu) cpuToPpuCycle(cycle uint64) uint {
 
 // CPU interface to write to externally-accessible registers
 func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
-	// fmt.Printf("Write PPU %04x = %02x (write queue %d)\n", addr, val, this.writeQueueCnt)
+	if addr != 0x4014 {
+		fmt.Printf("Write PPU %04x = %02x (write queue %d)\n", addr, val, this.writeQueueCnt)
+	}
 	this.writeQueue[this.writeQueueCnt] = ppuWrite{addr, val, this.cpuToPpuCycle(cycle)}
 	this.writeQueueCnt++
 }
 
 func (this *NesPpu) apply(upToCycle uint) {
 	item := this.processedUntil
-	for ; item < this.writeQueueCnt && this.writeQueue[item].cycle <= upToCycle; item++ {
+	t := uint(0)
+	for ; item < this.writeQueueCnt && this.writeQueue[item].cycle <= upToCycle && this.writeQueue[item].cycle >= t; item++ {
 		curItem := this.writeQueue[item]
 		addr := curItem.addr
 		val := curItem.val
 		cycle := curItem.cycle
+		t = curItem.cycle
 
 		switch addr {
 		case ppuControl1:
@@ -335,8 +344,30 @@ func (this *NesPpu) getAttrib(base uint16, coarseX, coarseY uint8) uint8 {
 	return (attribByte & (3 << shift)) >> shift
 }
 
+func (this *NesPpu) Print() {
+	for y := 0; y < 30; y++ {
+		for x := 0; x < 32; x++ {
+			fmt.Printf("%02x ", this.vram[y*32+x])
+		}
+		fmt.Printf("\n")
+	}
+}
+
 func (this *NesPpu) Render() *[61440]Color {
-	this.apply(this.cyclesPerFrame)
+	//this.apply(this.cyclesPerFrame)
+	if this.control2&16 == 16 {
+		this.drawSprites(true)
+	}
+	if this.control2&8 == 8 {
+		this.drawBackground()
+	}
+	if this.control2&16 == 16 {
+		this.drawSprites(false)
+	}
+	return &this.buffer
+}
+
+func (this *NesPpu) drawBackground() {
 	pix := 0
 	bgBase := 256 * uint16(this.control1&0x10)
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
@@ -353,8 +384,12 @@ func (this *NesPpu) Render() *[61440]Color {
 			}
 		}
 	}
+}
+
+func (this *NesPpu) drawSprites(lowPriority bool) {
 	for spr := 63; spr >= 0; spr-- {
-		if this.sprRam[spr*4] >= 0xef { // Sprite isn't visible
+		priority := this.sprRam[spr*4+2]&0x20 == 0x20
+		if this.sprRam[spr*4] >= 0xef || priority != lowPriority { // Sprite isn't visible, or doesn't match desired priority
 			continue
 		} else {
 			//fmt.Printf("Render Sprite %02x\n", spr)
@@ -366,7 +401,6 @@ func (this *NesPpu) Render() *[61440]Color {
 		pal := (s & 3) << 2
 		yf := (s & 0x80) == 0x80
 		xf := (s & 0x40) == 0x40
-		//p := (s & 0x20) == 0x20
 		height := uint8(8)
 		sprBase := uint16(this.control1&0x08) * 512
 		if this.control1&0x20 == 0x20 { // tall sprites
@@ -390,12 +424,12 @@ func (this *NesPpu) Render() *[61440]Color {
 				if xf {
 					xPix = 7 - xFine
 				}
+				bufferOffset := uint(x+xFine) + uint(y+line)*256
 				if tileLine[xPix] != 0 {
 					col := this.palette[this.palRam[(0x10+pal|tileLine[xPix])]]
-					this.buffer[uint(x+xFine)+uint(y+line)*256] = col
+					this.buffer[bufferOffset] = col
 				}
 			}
 		}
 	}
-	return &this.buffer
 }
