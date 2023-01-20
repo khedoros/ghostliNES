@@ -16,7 +16,7 @@ func (m CnromMapper) MapPpu(addr uint16, cycle uint64) uint {
 }
 
 func (m CnromMapper) WriteCpu(addr uint16, val uint8, cycle uint64) {
-	if addr > 0x8000 {
+	if addr >= 0x8000 {
 		m.chrPage = uint(val)
 	}
 }

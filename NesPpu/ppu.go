@@ -27,7 +27,7 @@ type NesPpu struct {
 	handledNmi        bool
 	clearedStatus     bool
 
-	writeQueue     [3000]ppuWrite
+	writeQueue     [30000]ppuWrite
 	writeQueueCnt  uint
 	processedUntil uint
 
@@ -373,7 +373,7 @@ func (this *NesPpu) drawBackground() {
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
 		for fineY := uint8(0); fineY < 8; fineY++ {
 			for coarseX := uint(0); coarseX < 32; coarseX++ {
-				tileNum := this.vram[coarseY*32+coarseX]
+				tileNum := this.vram[coarseY*32+coarseX+1024]
 				tileLine := this.getTileLine(bgBase, tileNum, fineY)
 				tileAttrib := this.getAttrib(0x2000, uint8(coarseX), uint8(coarseY)) << 2
 

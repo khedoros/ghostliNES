@@ -207,7 +207,10 @@ func (cart *NesCart) Load(filename *string, mapperNum int) bool {
 		cart.chrROM = contents
 	}
 	if mapperNum == -1 {
-		cart.header.MapperNum = MapperType(header[6]>>4 | (header[7] & 0xf0))
+		cart.header.MapperNum = MapperType(header[6]>>4)
+        if string(header[7:]) != "DiskDude!" {
+            cart.header.MapperNum = MapperType((header[6]>>4) | (header[7] & 0xf0))
+        }
 	} else {
 		cart.header.MapperNum = MapperType(mapperNum)
 	}
