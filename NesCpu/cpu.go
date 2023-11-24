@@ -16,25 +16,25 @@ const (
 	IRQVector = uint16(0xfffe)
 )
 
-//CPU6502 defines the structs necessary to hold the NES CPU's registers and table of opcodes.
+// CPU6502 defines the structs necessary to hold the NES CPU's registers and table of opcodes.
 type CPU6502 struct {
 	status                  statReg
 	pc                      uint16
 	areg, xreg, yreg, spreg byte
 	mem                     *nesmem.NesMem
 	ops                     [256]func() uint
-	frameCycle              uint
 	cycle                   uint64
+	cyclesLeft              int
 	zeroFlagNote            byte
 	negFlagNote             byte
 }
 
-//New initializes a CPU6502 struct with its initial values
+// New initializes a CPU6502 struct with its initial values
 func (cpu *CPU6502) New(m *nesmem.NesMem) {
 	cpu.status = statReg{Carry: false, Zero: false, Interrupt: true, Dec: false, True: true, Verflow: false, Sign: false}
 	cpu.negFlagNote, cpu.zeroFlagNote = 0, 1
 	cpu.pc = 0x0000
-	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg, cpu.frameCycle = 0, 0, 0, 0xfd, 0
+	cpu.areg, cpu.xreg, cpu.yreg, cpu.spreg = 0, 0, 0, 0xfd
 	fmt.Println("init'd CPU")
 	cpu.mem = m
 	for i := 0; i < 256; i++ {
@@ -44,9 +44,11 @@ func (cpu *CPU6502) New(m *nesmem.NesMem) {
 	fmt.Printf("Read address %04x and got vector %04x\n", RSTVector, cpu.pc)
 }
 
-func (cpu *CPU6502) Run(cycles uint) {
-	for cpu.frameCycle < cycles {
-		op := cpu.mem.Read(cpu.pc, cpu.cycle+uint64(cpu.cycle))
+// cycles is how many cpu cycles to run
+func (cpu *CPU6502) Run(cyclesToRun uint) {
+	cpu.cyclesLeft += int(cyclesToRun)
+	for cpu.cyclesLeft > 0 {
+		op := cpu.mem.Read(cpu.pc, cpu.cycle)
 		/*
 			switch cpu_ops[op].OpSize {
 			case 1:
@@ -66,15 +68,13 @@ func (cpu *CPU6502) Run(cycles uint) {
 		if opCycles == 0 {
 			panic(fmt.Sprintf("Zero-time operation found at pc %04x: %02x", cpu.pc, op))
 		}
-		cpu.frameCycle += opCycles
+		cpu.cyclesLeft -= int(opCycles)
 		cpu.cycle += uint64(opCycles)
 
 		if cpu.mem.IsPpuNmi(cpu.cycle) {
 			cpu.nmi()
 		}
 	}
-
-	cpu.frameCycle -= cycles
 }
 
 type CPU6502instr struct {

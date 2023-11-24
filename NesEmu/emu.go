@@ -93,9 +93,7 @@ func (emu *NesEmu) RunFrame() *[]byte {
 		frameDone = emu.ppu.Run(opChunk)
 		//finish APU render
 	}
-	emu.GetFrame()
-	return &emu.frame
-
+	return emu.GetFrame()
 }
 
 func (emu *NesEmu) GetFrame() *[]byte {

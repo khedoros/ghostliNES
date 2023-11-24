@@ -11,12 +11,13 @@ type ctrl2Reg uint8
 type statReg uint8
 
 type ppuWrite struct {
-	addr  uint16
-	val   uint8
-	cycle uint
+	addr       uint16
+	val        uint8
+	frame      uint64
+	frameCycle uint64
 }
 
-//An NesPpu represents an NES's Picture Processing Unit
+// An NesPpu represents an NES's Picture Processing Unit
 type NesPpu struct {
 	buffer            [256 * 240]Color
 	frameCycle        uint
@@ -27,7 +28,7 @@ type NesPpu struct {
 	handledNmi        bool
 	clearedStatus     bool
 
-	writeQueue     [30000]ppuWrite
+	writeQueue     [3000]ppuWrite
 	writeQueueCnt  uint
 	processedUntil uint
 
@@ -49,6 +50,13 @@ type NesPpu struct {
 	vramAddr2 uint8 // $2006 (W)
 	vramData  uint8 // $2007 (RW)
 	sprDMA    uint8 // $4014 (W)
+
+	tile1_byte1 uint8
+	tile1_byte2 uint8
+	tile1_attr  uint8
+	tile2_byte1 uint8
+	tile2_byte2 uint8
+	tile2_attr  uint8
 }
 
 const (
@@ -134,8 +142,8 @@ func (this *NesPpu) New(mem *nescart.NesCart, region string) {
 
 func (this *NesPpu) IsNmi(cycles uint64) bool {
 	if (this.control1)&0x80 > 0 && !this.handledNmi { // If NMI is enabled and haven't handled NMI yet
-		cycle := this.cpuToPpuCycle(cycles)
-		if cycle > this.cyclesBeforeVSync {
+		_, cycle := this.cpuToPpuCycle(cycles)
+		if uint(cycle) > this.cyclesBeforeVSync {
 			this.handledNmi = true
 			return true
 		}
@@ -143,9 +151,17 @@ func (this *NesPpu) IsNmi(cycles uint64) bool {
 	return false
 }
 
-func (this *NesPpu) Run(cycles uint) bool {
-	this.frameCycle += this.cpuToPpuCycle(uint64(cycles))
-	this.apply(this.frameCycle)
+func (this *NesPpu) Run(cpuCyclesToRunFor uint) bool {
+	frames, ppuCycles := this.cpuToPpuCycle(uint64(cpuCyclesToRunFor))
+	if frames > 0 {
+		panic(fmt.Sprintf("Told to run for %d CPU cycles; more than the number of PPU cycles per frame (%d)", cpuCyclesToRunFor, this.cyclesPerFrame))
+	}
+	for ; ppuCycles > 0; ppuCycles-- {
+		this.apply(this.frameCycle)
+		this.frameCycle++
+	}
+	//this.frameCycle += ppuCycles
+	//this.apply(this.frameCycle)
 	if this.frameCycle >= this.cyclesPerFrame {
 		this.frameCycle -= this.cyclesPerFrame
 		this.handledNmi = false
@@ -164,7 +180,7 @@ func (this *NesPpu) Run(cycles uint) bool {
 
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
-	frameCycle := uint64(float64(this.cpuPpuClockFactor)*float64(cycle)) % uint64(this.cyclesPerFrame)
+	_, frameCycle := this.cpuToPpuCycle(cycle)
 	if addr != 0x2002 {
 		fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
 	}
@@ -196,9 +212,9 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	}
 }
 
-func (this *NesPpu) cpuToPpuCycle(cycle uint64) uint {
+func (this *NesPpu) cpuToPpuCycle(cycle uint64) (frame, frameCycles uint64) {
 	cycles := uint64(float64(cycle) * this.cpuPpuClockFactor)
-	return uint(cycles % uint64(this.cyclesPerFrame))
+	return uint64(cycles / uint64(this.cyclesPerFrame)), (cycles % uint64(this.cyclesPerFrame))
 }
 
 // CPU interface to write to externally-accessible registers
@@ -206,19 +222,27 @@ func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 	if addr != 0x4014 {
 		fmt.Printf("Write PPU %04x = %02x (write queue %d)\n", addr, val, this.writeQueueCnt)
 	}
-	this.writeQueue[this.writeQueueCnt] = ppuWrite{addr, val, this.cpuToPpuCycle(cycle)}
-	this.writeQueueCnt++
+	if this.writeQueueCnt < uint(len(this.writeQueue)) {
+		frame, frameCycle := this.cpuToPpuCycle(cycle)
+		this.writeQueue[this.writeQueueCnt] = ppuWrite{addr, val, frame, frameCycle}
+		this.writeQueueCnt++
+	} else {
+		panic(fmt.Sprintf("Exceeded size of writeQueue (%d items)", len(this.writeQueue)))
+	}
 }
 
 func (this *NesPpu) apply(upToCycle uint) {
-	item := this.processedUntil
-	t := uint(0)
-	for ; item < this.writeQueueCnt && this.writeQueue[item].cycle <= upToCycle && this.writeQueue[item].cycle >= t; item++ {
-		curItem := this.writeQueue[item]
+	itemIdx := this.processedUntil
+	prevFrameCycle := this.writeQueue[itemIdx].frameCycle
+	for ; itemIdx < this.writeQueueCnt && uint(this.writeQueue[itemIdx].frameCycle) <= upToCycle; itemIdx++ {
+		curItem := this.writeQueue[itemIdx]
 		addr := curItem.addr
 		val := curItem.val
-		cycle := curItem.cycle
-		t = curItem.cycle
+		frameCycle := curItem.frameCycle
+		if frameCycle < prevFrameCycle {
+			// panic(fmt.Sprintf("item %d marked as cycle %d with previous item being at cycle %d", itemIdx, frameCycle, prevFrameCycle))
+		}
+		prevFrameCycle = curItem.frameCycle
 
 		switch addr {
 		case ppuControl1:
@@ -261,7 +285,7 @@ func (this *NesPpu) apply(upToCycle uint) {
 			}
 			this.vramLatch = !this.vramLatch
 		case ppuVramData:
-			this.write(this.vramPtr, val, uint64(cycle))
+			this.write(this.vramPtr, val, uint64(frameCycle))
 			if this.control1&4 == 4 {
 				this.vramPtr += 32
 			} else {
@@ -275,11 +299,13 @@ func (this *NesPpu) apply(upToCycle uint) {
 		}
 	}
 
-	if item == this.writeQueueCnt {
+	// Mark queue as empty when we get to the end
+	// or save last-processed index to pick up later
+	if itemIdx == this.writeQueueCnt {
 		this.processedUntil = 0
 		this.writeQueueCnt = 0
 	} else {
-		this.processedUntil = item
+		this.processedUntil = itemIdx
 	}
 }
 
