@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	nescart "github.com/khedoros/ghostliNES/NesCart"
+	mappers "github.com/khedoros/ghostliNES/NesCart/NesMappers"
 )
 
 type ctrl1Reg uint8
@@ -21,6 +22,7 @@ type ppuWrite struct {
 type NesPpu struct {
 	buffer            [256 * 240]Color
 	frameCycle        uint
+	frameCount        uint64
 	cyclesPerFrame    uint
 	linesPerFrame     uint
 	cyclesBeforeVSync uint
@@ -32,8 +34,9 @@ type NesPpu struct {
 	writeQueueCnt  uint
 	processedUntil uint
 
-	cart          *nescart.NesCart
-	vram          [2048]uint8
+	cart *nescart.NesCart
+	//	vram          [2048]uint8
+	vram          [4096]uint8
 	sprRam        [256]uint8
 	palRam        [32]uint8
 	palette       [64]Color
@@ -54,9 +57,11 @@ type NesPpu struct {
 	tile1_byte1 uint8
 	tile1_byte2 uint8
 	tile1_attr  uint8
+	tile1_nt    uint8
 	tile2_byte1 uint8
 	tile2_byte2 uint8
 	tile2_attr  uint8
+	tile2_nt    uint8
 }
 
 const (
@@ -142,7 +147,7 @@ func (this *NesPpu) New(mem *nescart.NesCart, region string) {
 
 func (this *NesPpu) IsNmi(cycles uint64) bool {
 	if (this.control1)&0x80 > 0 && !this.handledNmi { // If NMI is enabled and haven't handled NMI yet
-		_, cycle := this.cpuToPpuCycle(cycles)
+		cycle := this.cpuToPpuCycle(cycles)
 		if uint(cycle) > this.cyclesBeforeVSync {
 			this.handledNmi = true
 			return true
@@ -151,21 +156,24 @@ func (this *NesPpu) IsNmi(cycles uint64) bool {
 	return false
 }
 
+// Run the PPU for a given number of CPU cycles,
 func (this *NesPpu) Run(cpuCyclesToRunFor uint) bool {
-	frames, ppuCycles := this.cpuToPpuCycle(uint64(cpuCyclesToRunFor))
-	if frames > 0 {
+	if cpuCyclesToRunFor > this.cyclesPerFrame {
 		panic(fmt.Sprintf("Told to run for %d CPU cycles; more than the number of PPU cycles per frame (%d)", cpuCyclesToRunFor, this.cyclesPerFrame))
 	}
-	for ; ppuCycles > 0; ppuCycles-- {
+	ppuCycles := this.cpuToPpuCycle(uint64(cpuCyclesToRunFor))
+
+	for ; ppuCycles > 0 && this.frameCycle+1 < this.cyclesPerFrame; ppuCycles-- {
 		this.apply(this.frameCycle)
 		this.frameCycle++
 	}
 	//this.frameCycle += ppuCycles
 	//this.apply(this.frameCycle)
-	if this.frameCycle >= this.cyclesPerFrame {
+	if this.frameCycle+1 >= this.cyclesPerFrame {
 		this.frameCycle -= this.cyclesPerFrame
 		this.handledNmi = false
 		this.clearedStatus = false
+		this.frameCount++
 		return true
 	}
 	return false
@@ -180,7 +188,7 @@ func (this *NesPpu) Run(cpuCyclesToRunFor uint) bool {
 
 // CPU interface to read from externally-accessible registers
 func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
-	_, frameCycle := this.cpuToPpuCycle(cycle)
+	frameCycle := this.cpuToPpuCycle(cycle)
 	if addr != 0x2002 {
 		fmt.Printf("Read PPU %04x at frame cycle %d", addr, frameCycle)
 	}
@@ -212,19 +220,18 @@ func (this *NesPpu) Read(addr uint16, cycle uint64) uint8 {
 	}
 }
 
-func (this *NesPpu) cpuToPpuCycle(cycle uint64) (frame, frameCycles uint64) {
-	cycles := uint64(float64(cycle) * this.cpuPpuClockFactor)
-	return uint64(cycles / uint64(this.cyclesPerFrame)), (cycles % uint64(this.cyclesPerFrame))
+func (this *NesPpu) cpuToPpuCycle(cpuCycles uint64) (ppuCycles uint64) {
+	return uint64(float64(cpuCycles) * this.cpuPpuClockFactor)
 }
 
 // CPU interface to write to externally-accessible registers
 func (this *NesPpu) Write(addr uint16, val uint8, cycle uint64) {
 	if addr != 0x4014 {
-		fmt.Printf("Write PPU %04x = %02x (write queue %d)\n", addr, val, this.writeQueueCnt)
+		//fmt.Printf("Write PPU %04x = %02x (write queue %d)\n", addr, val, this.writeQueueCnt)
 	}
 	if this.writeQueueCnt < uint(len(this.writeQueue)) {
-		frame, frameCycle := this.cpuToPpuCycle(cycle)
-		this.writeQueue[this.writeQueueCnt] = ppuWrite{addr, val, frame, frameCycle}
+		frameCycle := this.cpuToPpuCycle(cycle)
+		this.writeQueue[this.writeQueueCnt] = ppuWrite{addr, val, this.frameCount, frameCycle}
 		this.writeQueueCnt++
 	} else {
 		panic(fmt.Sprintf("Exceeded size of writeQueue (%d items)", len(this.writeQueue)))
@@ -335,8 +342,25 @@ func (this *NesPpu) write(addr uint16, val uint8, cycle uint64) {
 			this.palRam[addr^0x10] = val
 		}
 	} else { // Write to name/attrib table
-		// TODO: Mirroring. For now, just keep the writes within physical VRAM
-		this.vram[addr&0x7ff] = val
+		// TODO: Finish Mirroring. I think the cartridge+mappers may need more implementation.
+		addr &= 0xfff
+		switch this.cart.GetMirror() {
+		case mappers.HMIRROR:
+			this.vram[addr] = val
+			this.vram[addr^0x400] = val
+		case mappers.VMIRROR:
+			this.vram[addr] = val
+			this.vram[addr^0x800] = val
+		case mappers.SINGLESCREEN:
+			this.vram[addr] = val
+			this.vram[addr^0x400] = val
+			this.vram[addr^0x800] = val
+			this.vram[addr^0xc00] = val
+		case mappers.FOURSCREEN:
+			this.vram[addr] = val
+		default:
+			panic(fmt.Sprintf("Unknown/unhandled VRAM mirror value received: %d", this.cart.GetMirror()))
+		}
 	}
 }
 
@@ -379,23 +403,57 @@ func (this *NesPpu) Print() {
 	}
 }
 
+func (this *NesPpu) spritesEnabled() bool {
+	return this.control2&0x10 == 0x10
+}
+
+func (this *NesPpu) backgroundEnabled() bool {
+	return this.control2&0x08 == 0x08
+}
+
+func (this *NesPpu) getBgBaseAddr() uint16 {
+	return 256 * uint16(this.control1&0x10)
+}
+
+func (this *NesPpu) getSpritePriority(sprNum int) bool {
+	return this.sprRam[sprNum*4+2]&0x20 == 0x20
+}
+
+func (this *NesPpu) getSpriteY(sprNum int) uint8 {
+	return this.sprRam[sprNum*4] + 1
+}
+
+func (this *NesPpu) getSpriteX(sprNum int) uint8 {
+	return this.sprRam[sprNum*4+3]
+}
+
+func (this *NesPpu) getSpriteTile(sprNum int) uint8 {
+	return this.sprRam[sprNum*4+1]
+}
+
+func (this *NesPpu) getSpriteAttrs(sprNum int) uint8 {
+	return this.sprRam[sprNum*4+2]
+}
+
 func (this *NesPpu) Render() *[61440]Color {
+	// Early debug rendering. Delete when I've got the graphics actually working.
 	//this.apply(this.cyclesPerFrame)
-	if this.control2&16 == 16 {
+	if this.spritesEnabled() {
 		this.drawSprites(true)
 	}
-	if this.control2&8 == 8 {
+	if this.backgroundEnabled() {
 		this.drawBackground()
 	}
-	if this.control2&16 == 16 {
+	if this.spritesEnabled() {
 		this.drawSprites(false)
 	}
 	return &this.buffer
 }
 
+// Debug rendering for the background
 func (this *NesPpu) drawBackground() {
 	pix := 0
-	bgBase := 256 * uint16(this.control1&0x10)
+	bgBase := this.getBgBaseAddr()
 	for coarseY := uint(0); coarseY < 30; coarseY++ {
 		for fineY := uint8(0); fineY < 8; fineY++ {
 			for coarseX := uint(0); coarseX < 32; coarseX++ {
@@ -412,18 +470,19 @@ func (this *NesPpu) drawBackground() {
 	}
 }
 
+// Debug rendering of the sprites. Argument is a bool representing the two priority levels
 func (this *NesPpu) drawSprites(lowPriority bool) {
 	for spr := 63; spr >= 0; spr-- {
-		priority := this.sprRam[spr*4+2]&0x20 == 0x20
-		if this.sprRam[spr*4] >= 0xef || priority != lowPriority { // Sprite isn't visible, or doesn't match desired priority
+		priority := this.getSpritePriority(spr)
+		if this.getSpriteY(spr) >= 0xf0 || priority != lowPriority { // Sprite isn't visible, or doesn't match desired priority
 			continue
 		} else {
 			//fmt.Printf("Render Sprite %02x\n", spr)
 		}
-		y := this.sprRam[spr*4] + 1
-		t := this.sprRam[spr*4+1]
-		s := this.sprRam[spr*4+2]
-		x := this.sprRam[spr*4+3]
+		y := this.getSpriteY(spr)
+		t := this.getSpriteTile(spr)
+		s := this.getSpriteAttrs(spr)
+		x := this.getSpriteX(spr)
 		pal := (s & 3) << 2
 		yf := (s & 0x80) == 0x80
 		xf := (s & 0x40) == 0x40

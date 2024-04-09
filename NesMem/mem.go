@@ -146,6 +146,9 @@ func (this *NesMem) Write(addr uint16, val uint8, cycle uint64) {
 			this.joy2Index = 0
 		}
 	} else if addr < 0x4020 {
+        if (addr >= 0x4000 && addr < 0x4014) || addr == 0x4015 || addr == 0x4017 {
+            this.apu.Write(addr, val, cycle)
+        }
 		//fmt.Printf("write addr: %x val: %x: I/O and APU space\n", addr, val)
 	} else {
 		this.cart.Write(addr, val, cycle)
